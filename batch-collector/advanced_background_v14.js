@@ -525,6 +525,8 @@ function ethanChineseError(value) {
     } finally { clearTimeout(timer); }
   }
 
+  globalThis.ethanCollectContextImage = (tab, item) => importItems(tab, [item], { antiHotlink: true });
+
   async function importItems(tab, items, meta = {}) {
     if (meta.destination === "browser") return downloadItems(tab, items, meta);
     const base = await findBillfishBase();

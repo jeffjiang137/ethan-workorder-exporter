@@ -91,6 +91,12 @@ async function ensureContextMenu() {
   }
 
   chrome.contextMenus.create({
+    id: 'ethan-save-image',
+    title: '保存图片',
+    contexts: ['image']
+  });
+
+  chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
     title: 'ID转1688链接',
     contexts: ['selection']
@@ -1112,3 +1118,5 @@ importScripts("product-page-download.js");
 importScripts("image-word-check-background.js");
 
 importScripts("ps-image-background.js");
+
+importScripts("context-image-background.js");
