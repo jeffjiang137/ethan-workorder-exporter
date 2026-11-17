@@ -1,3 +1,17 @@
+function ethanChineseError(value) {
+  const text = String(value || '操作未完成，请重试');
+  if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
+  if (/Failed to fetch|NetworkError|net::|Load failed/i.test(text)) return '网络连接失败，请检查网络和图片地址后重试';
+  if (/timeout|timed out|aborted|AbortError/i.test(text)) return '请求超时或已取消，请稍后重试';
+  if (/Extension context invalidated/i.test(text)) return '插件已更新，请刷新网页后重试';
+  if (/Receiving end does not exist|Could not establish connection|message port closed|message channel closed/i.test(text)) return '插件页面连接已断开，请刷新网页后重试';
+  if (/Cannot access|Missing host permission|permission denied|not allowed/i.test(text)) return '无法访问此页面或资源，请检查插件的网站访问权限';
+  if (/QUOTA|quota exceeded/i.test(text)) return '存储空间不足，请清理后重试';
+  if (/Download.*failed|SERVER_BAD_CONTENT|NETWORK_FAILED/i.test(text)) return '下载失败，请检查网络后重试';
+  if (/^[\x00-\x7f]+$/.test(text)) return '操作失败，请检查网络、页面权限或本地服务后重试';
+  return text;
+}
+
 // Only tabs created by this queue are closed after a completed download.
 let linkedProductQueueRunning = false;
 let linkedProductQueuePaused = false;
@@ -104,7 +118,7 @@ async function runLinkedProductQueue(urls, downloadKinds) {
       await chrome.tabs.remove(tab.id).catch(() => {});
       } catch (error) {
         if (linkedProductQueueCancelled) break;
-        failures.push({url: urls[index], message: error.message});
+        failures.push({url: urls[index], message: ethanChineseError(error.message)});
         await chrome.storage.local.set({
           linkedProductRemainingUrls: [...failures.map(item => item.url), ...urls.slice(index + 1)],
           linkedProductQueueFailures: failures
@@ -130,7 +144,7 @@ async function runLinkedProductQueue(urls, downloadKinds) {
   } catch (error) {
     if (linkedProductQueueCancelled) return;
     await chrome.storage.local.set({ linkedProductRemainingUrls: [...failures.map(item => item.url), ...urls.slice(processed)] });
-    await notifyMaterialProgress({ stage: 'error', message: error.message + '。剩余链接已保存，可重新打开面板重试。' });
+    await notifyMaterialProgress({ stage: 'error', message: ethanChineseError(error.message) + '。剩余链接已保存，可重新打开面板重试。' });
   } finally {
     try { await chrome.downloads.setUiOptions({enabled:true}); } catch (_) {}
     linkedProductQueueRunning = false;
@@ -168,7 +182,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         await notifyMaterialProgress({running:false,stage:'',title:'',message:'',failedCount:0});
       }
       return {ok:true};
-    })().then(respond, error => respond({ok:false,message:error.message}));
+    })().then(respond, error => respond({ok:false,message:ethanChineseError(error.message)}));
     return true;
   }
   if (message?.type === 'ETHAN_LINK_QUEUE_GATE') {
@@ -188,7 +202,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       }
       await publishLinkedQueueStatus();
       return {ok:true};
-    })().then(respond, error => respond({ok:false,message:error.message}));
+    })().then(respond, error => respond({ok:false,message:ethanChineseError(error.message)}));
     return true;
   }
   if (message?.type === 'ETHAN_MATERIAL_FAILURE_LOG' &&
@@ -232,7 +246,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         linkedActiveDownloads.delete(id);
         linkedDownloadPaths.delete(message.url);
       }
-    })().then(respond, error => respond({ ok: false, message: error.message }));
+    })().then(respond, error => respond({ ok: false, message: ethanChineseError(error.message) }));
     return true;
   }
   if (message?.type !== 'ETHAN_DOWNLOAD_LINKED_PRODUCTS') return false;
@@ -256,7 +270,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     await publishLinkedQueueStatus();
     MATERIAL_JOB_STATE.running = false;
     await setOffscreenKeepAlive(false).catch(() => {});
-    await notifyMaterialProgress({ stage: 'error', message: error.message });
+    await notifyMaterialProgress({ stage: 'error', message: ethanChineseError(error.message) });
   });
   return false;
 });

@@ -1,3 +1,17 @@
+function ethanChineseError(value) {
+  const text = String(value || '操作未完成，请重试');
+  if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
+  if (/Failed to fetch|NetworkError|net::|Load failed/i.test(text)) return '网络连接失败，请检查网络和图片地址后重试';
+  if (/timeout|timed out|aborted|AbortError/i.test(text)) return '请求超时或已取消，请稍后重试';
+  if (/Extension context invalidated/i.test(text)) return '插件已更新，请刷新网页后重试';
+  if (/Receiving end does not exist|Could not establish connection|message port closed|message channel closed/i.test(text)) return '插件页面连接已断开，请刷新网页后重试';
+  if (/Cannot access|Missing host permission|permission denied|not allowed/i.test(text)) return '无法访问此页面或资源，请检查插件的网站访问权限';
+  if (/QUOTA|quota exceeded/i.test(text)) return '存储空间不足，请清理后重试';
+  if (/Download.*failed|SERVER_BAD_CONTENT|NETWORK_FAILED/i.test(text)) return '下载失败，请检查网络后重试';
+  if (/^[\x00-\x7f]+$/.test(text)) return '操作失败，请检查网络、页面权限或本地服务后重试';
+  return text;
+}
+
 (() => {
   "use strict";
 
@@ -35,7 +49,7 @@
         runtime.sendMessage(message, (response) => {
           clearTimeout(timer);
           const error = runtime.lastError;
-          if (error) reject(new Error(error.message));
+          if (error) reject(new Error(ethanChineseError(error.message)));
           else resolve(response);
         });
       } catch (error) {
@@ -169,7 +183,7 @@
       <div class="mask">
         <div class="panel">
           <div class="top">
-            <img class="logo" src="../icons/icon128.png" alt=""><div><div class="title">图片批量采集</div><div class="sub">发现素材 · 选取原图 · 有序保存</div></div>
+            <img class="logo" src="${runtime.getURL("icons/icon128.png")}" alt=""><div><div class="title">图片批量采集</div><div class="sub">发现素材 · 选取原图 · 有序保存</div></div>
             <div class="spacer"></div>
             <button class="btn" data-action="rescan">重新扫描</button>
             <button class="btn" data-action="autoscroll">瀑布流自动滚动</button>
@@ -610,8 +624,8 @@
       if (frameNode) frameNode.innerHTML = frames.map((frame) => `${escapeHtml(frame.url || `frame ${frame.frameId}`)}：${frame.count || 0}${frame.error ? "（未注入）" : ""}`).join("<br>") || "仅顶层页面";
       setStatus(`扫描完成：发现 ${state.items.length} 个资源，来自 ${frames.length || 1} 个 frame`);
     } catch (error) {
-      setStatus(`扫描失败：${error.message}`);
-      toast(error.message);
+      setStatus(`扫描失败：${ethanChineseError(error.message)}`);
+      toast(ethanChineseError(error.message));
     } finally {
       state.scanning = false;
       renderGrid();
@@ -640,8 +654,8 @@
         ? `扫描已暂停，已发现 ${state.items.length} 个资源。可点击「继续扫描」。`
         : `自动滚动完成：共发现 ${state.items.length} 个资源`);
     } catch (error) {
-      setStatus(`自动滚动失败：${error.message}`);
-      toast(error.message);
+      setStatus(`自动滚动失败：${ethanChineseError(error.message)}`);
+      toast(ethanChineseError(error.message));
     } finally {
       state.autoScrolling = false;
       const currentButton = state.root?.querySelector('[data-action="autoscroll"]');
@@ -669,7 +683,7 @@
       applyFilters();
       setStatus("真实类型检测完成");
     } catch (error) {
-      setStatus(`类型检测失败：${error.message}`);
+      setStatus(`类型检测失败：${ethanChineseError(error.message)}`);
     }
   }
 
@@ -719,8 +733,8 @@
       refreshCurrentFolder();
       setStatus(`已读取 ${folders.length} 个文件夹`);
     } catch (error) {
-      setStatus(`读取文件夹失败：${error.message}`);
-      toast(error.message);
+      setStatus(`读取文件夹失败：${ethanChineseError(error.message)}`);
+      toast(ethanChineseError(error.message));
     }
   }
 
@@ -879,8 +893,8 @@
         toast(`已提交 ${response.imported || 0} 个素材到 Billfish`);
       }
     } catch (error) {
-      setStatus(`保存失败：${error.message}`);
-      toast(error.message, 4200);
+      setStatus(`保存失败：${ethanChineseError(error.message)}`);
+      toast(ethanChineseError(error.message), 4200);
     } finally {
       state.saving = false;
       updateCountOnly();
@@ -964,6 +978,26 @@
     }
     const checkWords=document.createElement('button');
     checkWords.className='btn';checkWords.textContent='极限词查询';checkWords.style.marginLeft='auto';tools.append(checkWords);
+    const wordLibrary=document.createElement('button');
+    wordLibrary.type='button';wordLibrary.className='btn';
+    wordLibrary.title='极限词库管理';wordLibrary.setAttribute('aria-label','打开极限词库管理');
+    wordLibrary.style.cssText='display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;padding:0';
+    wordLibrary.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-2H4z"/><path d="M13 7a3 3 0 0 1 3-3h5v15h-4a4 4 0 0 0-4 2M7 8h3M7 12h3M16 8h2M16 12h2"/></svg>';
+    wordLibrary.onclick=()=>{
+      if(state.root.querySelector('.word-library-modal'))return;
+      const overlay=document.createElement('div');overlay.className='word-library-modal';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.38);display:flex;align-items:center;justify-content:center;padding:24px';
+      const panel=document.createElement('div');panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','极限词库管理');
+      panel.style.cssText='position:relative;width:min(1050px,100%);height:min(760px,90vh);background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 16px 60px #0f172a40';
+      const frame=document.createElement('iframe');frame.src=runtime.getURL('word-library.html')+'?embedded=1';frame.title='极限词库管理';frame.style.cssText='width:100%;height:100%;border:0;display:block';
+      const close=document.createElement('button');close.className='btn';close.textContent='×';close.title='关闭词库';close.setAttribute('aria-label','关闭词库');close.style.cssText='position:absolute;right:10px;top:10px;width:30px;height:30px;padding:0;font-size:20px;z-index:1';
+      const dismiss=()=>{window.removeEventListener('message',onMessage);overlay.remove();wordLibrary.focus();};
+      const onMessage=event=>{if(event.source===frame.contentWindow&&event.data?.type==='ETHAN_WORD_LIBRARY_CLOSE')dismiss();};
+      window.addEventListener('message',onMessage);close.onclick=dismiss;
+      panel.append(frame);overlay.append(panel);state.root.append(overlay);frame.focus();
+    };
+    tools.append(wordLibrary);
+
     const wordResults=document.createElement('div');
     wordResults.style.cssText='display:none;padding:16px;width:340px;min-width:280px;max-width:40vw;overflow:auto;background:#fff;border-left:1px solid #dbe3ef;white-space:pre-wrap;font-size:13px;line-height:1.8;min-height:0';
     state.root.querySelector('.body').append(wordResults);
@@ -972,7 +1006,7 @@
       if(!images.length)return toast('请先勾选需要检测的图片');
       checkWords.disabled=true;wordResults.style.display='block';state.root.querySelector('.body').style.gridTemplateColumns='minmax(0,1fr) minmax(280px,340px)';wordResults.textContent='图片文字与极限词检测\n正在识别…';
       const lines=[];
-      const requestCheck=item=>send({type:'ETHAN_CHECK_IMAGE_WORDS',url:item.originalSrc||item.src},180000).catch(error=>({ok:false,message:error.message}));
+      const requestCheck=item=>send({type:'ETHAN_CHECK_IMAGE_WORDS',url:item.originalSrc||item.src},180000).catch(error=>({ok:false,message:ethanChineseError(error.message)}));
       const pendingChecks=new Map();
       images.slice(0,2).forEach((item,index)=>pendingChecks.set(index,requestCheck(item)));
       try {
@@ -983,7 +1017,7 @@
           if(index+2<images.length)pendingChecks.set(index+2,requestCheck(images[index+2]));
           const words=result?.matches?.map(match=>match.word)||[];
           const entry=document.createElement('section');entry.style.cssText='margin-bottom:22px;overflow-wrap:anywhere';
-          const title=document.createElement('div');title.style.cssText='font-weight:700;color:'+(!result?.ok?'#b45309':words.length?'#dc2626':'#15803d');title.textContent=item.title+'：'+(!result?.ok?'识别失败 '+(result?.message||'未知错误'):words.length?'命中 '+[...new Set(words)].join('、'):'未命中词库');entry.append(title);
+          const title=document.createElement('div');title.style.cssText='font-weight:700;color:'+(!result?.ok?'#b45309':words.length?'#dc2626':'#15803d');title.textContent=item.title+'：'+(!result?.ok?'识别失败 '+ethanChineseError(result?.message||'未知错误'):words.length?'命中 '+[...new Set(words)].join('、'):'未命中词库');entry.append(title);
           if(result?.text){
             const text=document.createElement('div');
             const raw=result.text,positions=[];let compact='',offsets=[];
@@ -1038,7 +1072,7 @@
     for(const [zip,label] of [[true,'下载为压缩包'],[false,'直接下载']]) {
       const old=footer.querySelector('[data-product-download="'+zip+'"]');old?.remove();
       const button=document.createElement('button');button.className='btn primary';button.dataset.productDownload=String(zip);button.textContent=label;
-      button.onclick=async()=>{button.disabled=true;try{await save(zip);}catch(error){toast(error.message);}finally{button.disabled=false;}};
+      button.onclick=async()=>{button.disabled=true;try{await save(zip);}catch(error){toast(ethanChineseError(error.message));}finally{button.disabled=false;}};
       footer.append(button);
     }
     applyFilters();
@@ -1048,11 +1082,11 @@
   runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || typeof message !== "object") return undefined;
     if (message.type === 'ETHAN_PRODUCT_MODE') {
-      openProductDownload(message.product).then(()=>sendResponse({ok:true}),error=>sendResponse({error:error.message}));
+      openProductDownload(message.product).then(()=>sendResponse({ok:true}),error=>sendResponse({error:ethanChineseError(error.message)}));
       return true;
     }
     if (message.type === "BFV14_OPEN_COLLECTOR") {
-      openUI().then(() => sendResponse?.({ ok: true }), error => sendResponse?.({ ok: false, error: error.message }));
+      openUI().then(() => sendResponse?.({ ok: true }), error => sendResponse?.({ ok: false, error: ethanChineseError(error.message) }));
       return true;
     }
     if (message.type === "BFV14_IMPORT_PROGRESS") {

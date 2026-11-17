@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ethan 工单助手",
-  "version": "1.0.48",
+  "version": "1.0.49",
   "description": "Ethan 工单管理快捷工具：将模版错写及模板主图别名统一统计为模板。",
   "permissions": [
     "clipboardWrite",
@@ -14,7 +14,8 @@
     "offscreen",
     "webNavigation",
     "downloads.ui",
-    "notifications"
+    "notifications",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://ethan.hzzichi.com/*",
@@ -73,6 +74,58 @@
         "product-page-entry.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://1688.com/*",
+        "*://*.1688.com/*",
+        "*://*.alibaba.com/*",
+        "*://*.taobao.com/*",
+        "*://*.tmall.com/*",
+        "*://*.alicdn.com/*",
+        "*://*.aliyun.com/*",
+        "*://*.aliyuncs.com/*",
+        "*://*.alibabacloud.com/*",
+        "*://*.alipay.com/*"
+      ],
+      "js": [
+        "popup-closer/rules.js",
+        "popup-closer/page_context.js",
+        "popup-closer/content.js"
+      ],
+      "css": [
+        "popup-closer/content.css"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
+      "world": "ISOLATED",
+      "exclude_matches": [
+        "*://login.taobao.com/*",
+        "*://login.1688.com/*",
+        "*://passport.taobao.com/*",
+        "*://passport.1688.com/*",
+        "*://passport.alibaba.com/*",
+        "*://*.1688.com/*login*",
+        "*://*.1688.com/*signin*",
+        "*://*.1688.com/member/jump.htm*",
+        "*://*.1688.com/member/marketSigninJump.htm*",
+        "*://*.taobao.com/*login*",
+        "*://*.alibaba.com/*login*"
+      ]
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "ps-images.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "icons": {
@@ -83,5 +136,20 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon128.png",
+        "word-library.html",
+        "word-library.js",
+        "vendor/ocr/words.json"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ]
+    }
+  ]
 }

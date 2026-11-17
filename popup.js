@@ -1,3 +1,17 @@
+function ethanChineseError(value) {
+  const text = String(value || '操作未完成，请重试');
+  if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
+  if (/Failed to fetch|NetworkError|net::|Load failed/i.test(text)) return '网络连接失败，请检查网络和图片地址后重试';
+  if (/timeout|timed out|aborted|AbortError/i.test(text)) return '请求超时或已取消，请稍后重试';
+  if (/Extension context invalidated/i.test(text)) return '插件已更新，请刷新网页后重试';
+  if (/Receiving end does not exist|Could not establish connection|message port closed|message channel closed/i.test(text)) return '插件页面连接已断开，请刷新网页后重试';
+  if (/Cannot access|Missing host permission|permission denied|not allowed/i.test(text)) return '无法访问此页面或资源，请检查插件的网站访问权限';
+  if (/QUOTA|quota exceeded/i.test(text)) return '存储空间不足，请清理后重试';
+  if (/Download.*failed|SERVER_BAD_CONTENT|NETWORK_FAILED/i.test(text)) return '下载失败，请检查网络后重试';
+  if (/^[\x00-\x7f]+$/.test(text)) return '操作失败，请检查网络、页面权限或本地服务后重试';
+  return text;
+}
+
 const OPERATOR_STORAGE_KEY = 'ethanOperatorName';
 const OPERATOR_HISTORY_KEY = 'ethanOperatorNames';
 
@@ -160,7 +174,7 @@ async function getActiveEthanTab() {
 }
 
 function isMissingReceiverError(error) {
-  const message = String(error?.message || error || '');
+  const message = String(ethanChineseError(error?.message) || error || '');
   return /Could not establish connection|Receiving end does not exist|message port closed/i.test(message);
 }
 
@@ -222,7 +236,7 @@ extractButton.addEventListener('click', async () => {
       statusNode.textContent = response?.message || '提取失败';
     }
   } catch (error) {
-    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (error?.message || '页面未就绪，请刷新网站后重试');
+    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (ethanChineseError(error?.message) || '页面未就绪，请刷新网站后重试');
   } finally {
     setBusy(extractButton, false);
   }
@@ -253,7 +267,7 @@ statsButton.addEventListener('click', async () => {
       statusNode.textContent = response?.message || '筛选失败';
     }
   } catch (error) {
-    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (error?.message || '页面未就绪，请刷新网站后重试');
+    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (ethanChineseError(error?.message) || '页面未就绪，请刷新网站后重试');
   } finally {
     setBusy(statsButton, false);
   }
@@ -279,7 +293,7 @@ todayStatsButton.addEventListener('click', async () => {
       statusNode.textContent = response?.message || '统计失败';
     }
   } catch (error) {
-    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (error?.message || '页面未就绪，请刷新网站后重试');
+    statusNode.textContent = isMissingReceiverError(error) ? '页面连接恢复失败，请刷新网站后重试' : (ethanChineseError(error?.message) || '页面未就绪，请刷新网站后重试');
   } finally {
     setBusy(todayStatsButton, false);
   }
@@ -335,7 +349,7 @@ openProductLinksButton.addEventListener('click', async () => {
       linkStatusNode.textContent = response?.message || '批量打开失败。';
     }
   } catch (error) {
-    linkStatusNode.textContent = error?.message || '批量打开失败。';
+    linkStatusNode.textContent = ethanChineseError(error?.message) || '批量打开失败。';
   } finally {
     openProductLinksButton.disabled = false;
     openProductLinksButton.textContent = '新窗口批量打开';
@@ -413,7 +427,7 @@ downloadAllTabMaterialsButton.addEventListener('click', async () => {
     materialStatusNode.textContent = response?.message || '批量素材下载启动失败。';
   } catch (error) {
     setMaterialDownloadRunning(false);
-    materialStatusNode.textContent = error?.message || '批量素材下载启动失败。';
+    materialStatusNode.textContent = ethanChineseError(error?.message) || '批量素材下载启动失败。';
   }
 });
 
@@ -432,7 +446,7 @@ batchCollectorButton.addEventListener('click', async () => {
     if (!result?.ok) throw new Error(result?.error || '无法打开批量采集窗口');
     window.close();
   } catch (error) {
-    status.textContent = error.message;
+    status.textContent = ethanChineseError(error.message);
   } finally {
     batchCollectorButton.disabled = false;
   }
@@ -513,7 +527,7 @@ getPageProductLinksButton.addEventListener('click', async () => {
     linkStatusNode.textContent = links.length ? `本页 ${links.length} 个，新增 ${added.length} 个，重复 ${duplicates.length} 个 · 总计 ${total} 个` : `当前页面未找到产品详情链接 · 总计 ${total} 个`;
     linkStatusNode.title = duplicates.length ? '已在列表中的商品\n' + duplicates.join('\n') : '';
   } catch (error) {
-    linkStatusNode.textContent = `获取失败：${error.message}`;
+    linkStatusNode.textContent = `获取失败：${ethanChineseError(error.message)}`;
   } finally {
     getPageProductLinksButton.disabled = false;
   }
@@ -530,7 +544,7 @@ document.getElementById('saveProductLinksTxt').addEventListener('click', async (
     await chrome.downloads.download({ url, filename: `产品链接-${stamp}.txt`, saveAs: false });
     linkStatusNode.textContent = '已开始下载 TXT 文件';
   } catch (error) {
-    linkStatusNode.textContent = `保存失败：${error.message}`;
+    linkStatusNode.textContent = `保存失败：${ethanChineseError(error.message)}`;
   }
 });
 
@@ -539,7 +553,7 @@ document.getElementById('clearProductLinks').addEventListener('click', async () 
   void saveProductLinksDraft();
   linkStatusNode.textContent = '';
   productLinksInput.focus();
-  const response = await chrome.runtime.sendMessage({type:'ETHAN_CLEAR_LINK_QUEUE'}).catch(error => ({ok:false,message:error.message}));
+  const response = await chrome.runtime.sendMessage({type:'ETHAN_CLEAR_LINK_QUEUE'}).catch(error => ({ok:false,message:ethanChineseError(error.message)}));
   if (!response?.ok) linkStatusNode.textContent = response?.message || '任务清除失败';
   else {
     linkStatusNode.textContent = '';
@@ -556,7 +570,7 @@ downloadLinkedProducts.addEventListener('click', async () => {
     if (!Object.values(downloadKinds).some(Boolean)) throw new Error('请至少选择一种素材');
     const response = await chrome.runtime.sendMessage({type:'ETHAN_DOWNLOAD_LINKED_PRODUCTS', text:productLinksInput.value, downloadKinds});
     linkStatusNode.textContent = response?.message || '队列已启动，可关闭面板。';
-  } catch (error) { linkStatusNode.textContent = error.message; }
+  } catch (error) { linkStatusNode.textContent = ethanChineseError(error.message); }
   finally { downloadLinkedProducts.disabled = false; }
 });
 
@@ -567,7 +581,7 @@ document.getElementById('getShopProductLinks').addEventListener('click', async (
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     const response = await chrome.runtime.sendMessage({type:'ETHAN_COLLECT_SHOP_LINKS',tabId:tab?.id});
     linkStatusNode.textContent = response.message;
-  } catch (error) { linkStatusNode.textContent = error.message; }
+  } catch (error) { linkStatusNode.textContent = ethanChineseError(error.message); }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
@@ -631,11 +645,22 @@ endLinkedTask.addEventListener('click', async () => {
     materialStatusNode.textContent = '';
     document.getElementById('batchCollectorStatus').textContent = '';
     endLinkedTask.hidden = true;
-  } catch (error) { linkStatusNode.textContent = error.message; }
+  } catch (error) { linkStatusNode.textContent = ethanChineseError(error.message); }
   finally { endLinkedTask.disabled = false; }
 });
 
-document.getElementById('manageWordDictionary').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('word-library.html')});
+document.getElementById('manageWordDictionary').onclick=()=>{
+  if(document.getElementById('wordLibraryDialog'))return;
+  const dialog=document.createElement('dialog');dialog.id='wordLibraryDialog';
+  dialog.style.cssText='width:100%;height:580px;max-height:100vh;max-width:none;margin:0;padding:0;border:0;border-radius:0;background:#fff;overflow:hidden';
+  const frame=document.createElement('iframe');frame.src=chrome.runtime.getURL('word-library.html')+'?embedded=1';frame.title='极限词库管理';frame.style.cssText='display:block;width:100%;height:100%;border:0';
+  const close=document.createElement('button');close.textContent='×';close.setAttribute('aria-label','关闭词库');close.style.cssText='position:absolute;top:7px;right:8px;width:28px;min-height:28px;padding:0;font-size:20px';
+  const dismiss=()=>{dialog.close();};
+  const onMessage=event=>{if(event.source===frame.contentWindow&&event.data?.type==='ETHAN_WORD_LIBRARY_CLOSE')dismiss();};
+  window.addEventListener('message',onMessage);
+  dialog.addEventListener('close',()=>{window.removeEventListener('message',onMessage);dialog.remove();document.getElementById('manageWordDictionary').focus();});
+  close.onclick=dismiss;dialog.append(frame);document.body.append(dialog);dialog.showModal();
+};
 
 const linkedSpeedModeButton=document.getElementById('linkedSpeedMode');
 function renderLinkedSpeedMode(mode){
@@ -652,3 +677,35 @@ linkedSpeedModeButton.onclick=async()=>{
   finally{linkedSpeedModeButton.disabled=false;}
 };
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.linkedDownloadSpeedMode)renderLinkedSpeedMode(changes.linkedDownloadSpeedMode.newValue);});
+
+// Optional 1688 popup closing; shared across every injected frame.
+(async () => {
+  const toggle = document.getElementById('autoClose1688Popups');
+  if (!toggle) return;
+  toggle.disabled = true;
+  try {
+    const saved = await chrome.storage.sync.get({ ethan1688PopupCloseEnabled: false });
+    toggle.checked = saved.ethan1688PopupCloseEnabled === true;
+    toggle.disabled = false;
+  } catch (error) {
+    console.error('读取1688弹窗关闭设置失败', error);
+    toggle.title = '设置读取失败，请重新打开插件';
+    return;
+  }
+  toggle.addEventListener('change', async () => {
+    toggle.disabled = true;
+    try {
+      await chrome.storage.sync.set({ ethan1688PopupCloseEnabled: toggle.checked });
+    } catch (error) {
+      toggle.checked = !toggle.checked;
+      toggle.title = '保存失败，请重试';
+      console.error('保存1688弹窗关闭设置失败', error);
+    } finally {
+      toggle.disabled = false;
+    }
+  });
+})();
+
+const psImageToggle=document.getElementById('psImageEnabled');
+chrome.storage.local.get({psImageEnabled:true},v=>{psImageToggle.checked=v.psImageEnabled;});
+psImageToggle.addEventListener('change',()=>chrome.storage.local.set({psImageEnabled:psImageToggle.checked}));

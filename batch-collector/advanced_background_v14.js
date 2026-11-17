@@ -1,3 +1,17 @@
+function ethanChineseError(value) {
+  const text = String(value || '操作未完成，请重试');
+  if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
+  if (/Failed to fetch|NetworkError|net::|Load failed/i.test(text)) return '网络连接失败，请检查网络和图片地址后重试';
+  if (/timeout|timed out|aborted|AbortError/i.test(text)) return '请求超时或已取消，请稍后重试';
+  if (/Extension context invalidated/i.test(text)) return '插件已更新，请刷新网页后重试';
+  if (/Receiving end does not exist|Could not establish connection|message port closed|message channel closed/i.test(text)) return '插件页面连接已断开，请刷新网页后重试';
+  if (/Cannot access|Missing host permission|permission denied|not allowed/i.test(text)) return '无法访问此页面或资源，请检查插件的网站访问权限';
+  if (/QUOTA|quota exceeded/i.test(text)) return '存储空间不足，请清理后重试';
+  if (/Download.*failed|SERVER_BAD_CONTENT|NETWORK_FAILED/i.test(text)) return '下载失败，请检查网络后重试';
+  if (/^[\x00-\x7f]+$/.test(text)) return '操作失败，请检查网络、页面权限或本地服务后重试';
+  return text;
+}
+
 (() => {
   "use strict";
 
@@ -23,7 +37,7 @@
       try {
         fn((value) => {
           const error = ext.runtime.lastError;
-          if (error) reject(new Error(error.message));
+          if (error) reject(new Error(ethanChineseError(error.message)));
           else resolve(value);
         });
       } catch (error) {
@@ -45,7 +59,7 @@
       const options = Number.isInteger(frameId) ? { frameId } : undefined;
       const callback = (response) => {
         const error = ext.runtime.lastError;
-        if (error) reject(new Error(error.message));
+        if (error) reject(new Error(ethanChineseError(error.message)));
         else resolve(response);
       };
       try {
@@ -145,7 +159,7 @@
         if (!response || response.error) throw new Error(response?.error || "采集脚本未响应");
         return { frameId: frame.frameId, frameUrl: frame.url, ...response, items: await enrich1688ProductCards(tabId, frame.frameId, response?.items || []) };
       } catch (error) {
-        return { frameId: frame.frameId, frameUrl: frame.url, items: [], error: error.message };
+        return { frameId: frame.frameId, frameUrl: frame.url, items: [], error: ethanChineseError(error.message) };
       }
     }));
     if (responses.find(frame => frame.frameId === 0)?.error) throw new Error("无法扫描当前页面，请刷新后重试");
@@ -253,7 +267,7 @@
           signal: controller.signal
         });
       } catch (error) {
-        return { type: hint || "", mime: "", ext: extensionFromUrl(url), valid: false, error: error.message, url };
+        return { type: hint || "", mime: "", ext: extensionFromUrl(url), valid: false, error: ethanChineseError(error.message), url };
       }
       if (!response.ok && response.status !== 206) return { type: hint || "", mime: response.headers.get("content-type") || "", ext: extensionFromUrl(url), valid: false, status: response.status, url };
       const headerType = typeFromMime(response.headers.get("content-type"), hint);
@@ -468,7 +482,7 @@
         counters[item.category] = number;
         downloaded++;
       }
-      catch (error) { failures.push({ title: item.title, error: String(error?.message || error) }); }
+      catch (error) { failures.push({ title: item.title, error: String(ethanChineseError(error?.message) || error) }); }
       sendToTab(tab.id, { type: "BFV14_IMPORT_PROGRESS", destination: "browser", done: downloaded + failures.length, imported: downloaded, failed: failures.length, total: items.length }).catch(() => {});
     }
     return { imported: downloaded, downloaded, failed: failures.length, failures, destination: "browser" };
@@ -597,8 +611,8 @@
           imported += 1;
           sendToTab(tab.id, { type: "BFV14_IMPORT_PROGRESS", done: imported + failures.length, imported, failed: failures.length, total: items.length, title: payload.title }).catch(() => {});
         } catch (error) {
-          failures.push({ title: item?.title || "", src: item?.src || "", error: String(error?.message || error) });
-          sendToTab(tab.id, { type: "BFV14_IMPORT_PROGRESS", done: imported + failures.length, imported, failed: failures.length, total: items.length, error: String(error?.message || error) }).catch(() => {});
+          failures.push({ title: item?.title || "", src: item?.src || "", error: String(ethanChineseError(error?.message) || error) });
+          sendToTab(tab.id, { type: "BFV14_IMPORT_PROGRESS", done: imported + failures.length, imported, failed: failures.length, total: items.length, error: String(ethanChineseError(error?.message) || error) }).catch(() => {});
         }
       }
     });
@@ -663,7 +677,7 @@
     if (!message || typeof message !== "object") return undefined;
 
     if (message.type === "ETHAN_OPEN_BATCH_COLLECTOR" && sender.url === ext.runtime.getURL("popup.html")) {
-      openCollector(message.tabId).then(sendResponse, error => sendResponse({ ok: false, error: error.message }));
+      openCollector(message.tabId).then(sendResponse, error => sendResponse({ ok: false, error: ethanChineseError(error.message) }));
       return true;
     }
     if (message.type === "BFV14_SCAN_ALL") {
@@ -671,7 +685,7 @@
         const tab = sender.tab || await activeTab();
         if (!tab?.id) throw new Error("没有活动网页");
         return scanAllFrames(tab.id, message.options || {});
-      })().then(sendResponse, (error) => sendResponse({ items: [], frames: [], error: String(error?.message || error) }));
+      })().then(sendResponse, (error) => sendResponse({ items: [], frames: [], error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_AUTOSCROLL_TOP") {
@@ -682,7 +696,7 @@
         const all = await scanAllFrames(tab.id, message.options || {});
         const merged = uniqueBy([...(result?.items || []), ...(all.items || [])], (item) => `${item.type}|${item.identitySrc || item.src || item.originalSrc}`);
         return { ...all, items: merged, autoScroll: result };
-      })().then(sendResponse, (error) => sendResponse({ items: [], frames: [], error: String(error?.message || error) }));
+      })().then(sendResponse, (error) => sendResponse({ items: [], frames: [], error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_STOP_AUTOSCROLL") {
@@ -718,7 +732,7 @@
       if (!upload || upload.length !== upload.total) { sendResponse({ error: "长图数据已失效，请重新保存" }); return; }
       const src = upload.chunks.join("");
       if (!/^data:image\/(?:png|jpeg);base64,/.test(src)) { sendResponse({ error: "长图格式无效" }); return; }
-      importStitchedImage(tab, { ...message.item, src, type: "image" }, message.meta || {}).then(sendResponse, error => sendResponse({ error: String(error?.message || error) }));
+      importStitchedImage(tab, { ...message.item, src, type: "image" }, message.meta || {}).then(sendResponse, error => sendResponse({ error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_GET_CURRENT_FOLDER") {
@@ -737,7 +751,7 @@
           if (!sender.tab?.id) throw error;
           return requestBypass(sender.tab.id, chosen.url);
         }
-      })().then(sendResponse, error => sendResponse({ error: String(error?.message || error) }));
+      })().then(sendResponse, error => sendResponse({ error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_PREVIEW") {
@@ -752,15 +766,15 @@
           }
           throw firstError;
         }
-      })().then(sendResponse, (error) => sendResponse({ error: String(error?.message || error) }));
+      })().then(sendResponse, (error) => sendResponse({ error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_DETECT_TYPES") {
-      Promise.all((message.items || []).slice(0, 300).map(async (item) => ({ key: item.key, ...(await chooseCandidate(item)) }))).then(sendResponse, (error) => sendResponse({ error: String(error?.message || error) }));
+      Promise.all((message.items || []).slice(0, 300).map(async (item) => ({ key: item.key, ...(await chooseCandidate(item)) }))).then(sendResponse, (error) => sendResponse({ error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_GET_FOLDERS") {
-      getFolders().then(sendResponse, (error) => sendResponse({ error: String(error?.message || error) }));
+      getFolders().then(sendResponse, (error) => sendResponse({ error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     if (message.type === "BFV14_IMPORT") {
@@ -768,7 +782,7 @@
         const tab = sender.tab || await activeTab();
         if (!tab?.id) throw new Error("没有活动网页");
         return importItems(tab, message.items || [], message.meta || {});
-      })().then(sendResponse, (error) => sendResponse({ imported: 0, failed: (message.items || []).length, error: String(error?.message || error) }));
+      })().then(sendResponse, (error) => sendResponse({ imported: 0, failed: (message.items || []).length, error: String(ethanChineseError(error?.message) || error) }));
       return true;
     }
     return undefined;

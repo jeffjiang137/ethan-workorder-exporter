@@ -1,3 +1,17 @@
+function ethanChineseError(value) {
+  const text = String(value || '操作未完成，请重试');
+  if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
+  if (/Failed to fetch|NetworkError|net::|Load failed/i.test(text)) return '网络连接失败，请检查网络和图片地址后重试';
+  if (/timeout|timed out|aborted|AbortError/i.test(text)) return '请求超时或已取消，请稍后重试';
+  if (/Extension context invalidated/i.test(text)) return '插件已更新，请刷新网页后重试';
+  if (/Receiving end does not exist|Could not establish connection|message port closed|message channel closed/i.test(text)) return '插件页面连接已断开，请刷新网页后重试';
+  if (/Cannot access|Missing host permission|permission denied|not allowed/i.test(text)) return '无法访问此页面或资源，请检查插件的网站访问权限';
+  if (/QUOTA|quota exceeded/i.test(text)) return '存储空间不足，请清理后重试';
+  if (/Download.*failed|SERVER_BAD_CONTENT|NETWORK_FAILED/i.test(text)) return '下载失败，请检查网络后重试';
+  if (/^[\x00-\x7f]+$/.test(text)) return '操作失败，请检查网络、页面权限或本地服务后重试';
+  return text;
+}
+
 importScripts("batch-collector/advanced_background_v14.js");
 
 const CONTEXT_MENU_ID = 'ethan-id-to-1688-link';
@@ -734,13 +748,23 @@ async function hasOffscreenDocument() {
   return false;
 }
 
+let offscreenCreationPromise = null;
 async function ensureOffscreenDocument() {
-  if (await hasOffscreenDocument()) return;
-  await chrome.offscreen.createDocument({
-    url: MATERIAL_OFFSCREEN_URL,
-    reasons: ['BLOBS'],
-    justification: '将多个1688产品素材按旺参谋PC端文件夹结构打包成单个ZIP，避免产生大量零散下载任务。'
-  });
+  if (offscreenCreationPromise) return offscreenCreationPromise;
+  offscreenCreationPromise = (async () => {
+    if (await hasOffscreenDocument()) return;
+    try {
+      await chrome.offscreen.createDocument({
+        url: MATERIAL_OFFSCREEN_URL,
+        reasons: ['BLOBS'],
+        justification: '为素材打包和图片文字识别提供共享离屏页面。'
+      });
+    } catch (error) {
+      if (!await hasOffscreenDocument()) throw error;
+    }
+  })();
+  try { await offscreenCreationPromise; }
+  finally { offscreenCreationPromise = null; }
 }
 
 async function setOffscreenKeepAlive(active) {
@@ -869,7 +893,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         else await notifyMaterialProgress({ stage: 'error', message: result?.message || '批量素材下载失败。' });
       })
       .catch(async (error) => {
-        await notifyMaterialProgress({ stage: 'error', message: error?.message || '批量素材下载失败。' });
+        await notifyMaterialProgress({ stage: 'error', message: ethanChineseError(error?.message) || '批量素材下载失败。' });
       })
       .finally(async () => {
         MATERIAL_JOB_STATE.running = false;
@@ -886,7 +910,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   openUrlsInNewWindow(parsed.urls)
     .then((result) => sendResponse({ ok: true, ...result, invalid: parsed.invalid }))
-    .catch((error) => sendResponse({ ok: false, message: error?.message || '批量打开失败。', invalid: parsed.invalid }));
+    .catch((error) => sendResponse({ ok: false, message: ethanChineseError(error?.message) || '批量打开失败。', invalid: parsed.invalid }));
   return true;
 });
 
@@ -1075,7 +1099,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return { ok: true, rowCount: owner.dataList.length };
     }
   }).then(results => sendResponse(results[0]?.result || {ok:false,message:'列表更新失败'}))
-    .catch(error => sendResponse({ok:false,message:error.message}));
+    .catch(error => sendResponse({ok:false,message:ethanChineseError(error.message)}));
   return true;
 });
 
@@ -1086,3 +1110,5 @@ importScripts("shop-link-collector.js");
 importScripts("product-page-download.js");
 
 importScripts("image-word-check-background.js");
+
+importScripts("ps-image-background.js");

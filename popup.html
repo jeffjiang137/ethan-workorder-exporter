@@ -85,8 +85,11 @@
     .operator-row{gap:7px;grid-template-columns:minmax(0,1fr) 54px}
     input,textarea{border-color:#dce3ed;border-radius:7px;color:#30425d;background:#fff}
     input:focus,textarea:focus{border-color:#7fa9f0;box-shadow:0 0 0 2px #2563eb0d;outline:none}
-    .operator-tag{margin:0 4px 0 0;padding:1px 6px;border-color:#dce3ed;background:#fff;border-radius:5px}
-    .operator-tag-name{color:#62718a;font-size:11px}.operator-tag:has([aria-pressed="true"]){background:#eaf1ff;border-color:#b8d0fa}.operator-tag-name[aria-pressed="true"]{color:#2563eb}
+    .operator-tag{margin:0 4px 0 0;padding:0;border-color:#dce3ed;background:#fff;border-radius:5px}
+    .operator-tag-name{color:#62718a;font-size:11px;padding:3px 6px;border-radius:4px}
+    .operator-tag:hover,.operator-tag:focus-within{background:#edf3ff;border-color:#b0c9f4}
+    .operator-tag .operator-tag-name:hover{background:transparent}
+    .operator-tag:has([aria-pressed="true"]):hover{background:#dce9ff;border-color:#93b8ff}.operator-tag:has([aria-pressed="true"]){background:#eaf1ff;border-color:#b8d0fa}.operator-tag-name[aria-pressed="true"]{color:#2563eb}
     #saveOperator{background:#eaf1ff;border-color:#ccdcf8;color:#2563eb}
     .link-tools{padding:10px;background:#fff;border:1px solid #e0e7f0;border-radius:10px;margin-bottom:10px}
     .link-tools>.setting-title{gap:5px;margin-bottom:7px}
@@ -116,6 +119,29 @@
     #stats{background:#eaf7f0;border-color:#c9e8d7;color:#328461}
     #todayStats{background:#edf3ff;border-color:#ccdcf8;color:#366fc3}
   #checkForUpdates{margin-left:auto;width:auto;min-height:26px;padding:3px 7px;font-size:11px;white-space:nowrap}#updateStatus{font-size:11px;line-height:1.5;color:#65758c;overflow-wrap:anywhere}#updateStatus:not(:empty){margin-bottom:10px}
+.related-tools{margin-top:14px;padding-top:12px;border-top:1px solid #e1e7ef}.related-tools-title{margin:0 0 8px;color:#65758c;font-size:11px;font-weight:600}.related-tools-links{display:grid;gap:6px}.related-tool{display:block;padding:8px 10px;border:1px solid #dce3ed;border-radius:7px;background:#fff;color:#43536a;text-decoration:none;font-size:12px;font-weight:600;text-align:center}.related-tool:hover{background:#edf3ff;border-color:#b0c9f4;color:#2563eb}.related-tool:focus-visible{outline:2px solid #93b8ff;outline-offset:2px}
+.related-tools{margin-top:10px;padding-top:8px}.related-tools-title{display:flex;align-items:center;justify-content:space-between;margin:0;padding:5px 0;cursor:pointer;list-style:none;user-select:none}.related-tools-title::-webkit-details-marker{display:none}.related-tools-title:focus-visible{outline:2px solid #93b8ff;outline-offset:2px;border-radius:4px}.related-tools-arrow{font-size:15px;color:#8796ac;transition:transform .15s}.related-tools[open] .related-tools-arrow{transform:rotate(180deg)}.related-tools-links{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:5px}.related-tool{padding:6px 4px;font-size:10px;line-height:1.4;border-radius:6px}.related-tool:first-child{grid-column:1/-1}
+/* Keep scrolling inside a stable popup viewport. */
+    html{width:350px;overflow:hidden}
+    body{width:350px;max-height:580px;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#bac6d7 #f5f7fb}
+    body::-webkit-scrollbar{width:7px}
+    body::-webkit-scrollbar-track{background:#f5f7fb}
+    body::-webkit-scrollbar-thumb{background:#bac6d7;border:2px solid #f5f7fb;border-radius:8px}
+    body::-webkit-scrollbar-thumb:hover{background:#91a3bc}
+    .related-tools-title{min-height:28px;line-height:18px;padding:5px 0;gap:8px}
+    .related-tools-arrow{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font-size:inherit;color:#7b8da6;transform:none;transition:transform .18s ease;transform-origin:50% 50%}
+    .related-tools-arrow svg{display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+    .related-tools-title:hover .related-tools-arrow{color:#2563eb}
+    .related-tools[open] .related-tools-arrow{transform:rotate(180deg)}
+    @media(prefers-reduced-motion:reduce){.related-tools-arrow{transition:none}}
+
+    .utility-controls{display:grid;grid-template-columns:1fr 1fr 1.12fr;gap:5px;margin:8px 0 10px;padding:0;background:transparent;border:0;border-radius:0}
+    .utility-controls #manageWordDictionary,.utility-controls .utility-toggle{display:flex;align-items:center;justify-content:center;gap:4px;height:34px;min-height:34px;min-width:0;margin:0;padding:0 4px;border:1px solid #dce3ed;border-radius:6px;background:#fff;color:#52647b;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+    .utility-controls #manageWordDictionary{color:#304b70}
+    .utility-controls .utility-toggle input[type="checkbox"]{flex:0 0 12px;width:12px;height:12px;margin:0;padding:0;accent-color:#2563eb;box-shadow:none}
+    .utility-controls .utility-toggle:has(input:checked){background:#eaf1ff;border-color:#b8d0fa;color:#2563eb}
+    .utility-controls #manageWordDictionary:hover,.utility-controls .utility-toggle:hover{background:#e2ecff;border-color:#9dbcf0}
+    .utility-controls .utility-toggle:focus-within{outline:2px solid #93b8ff;outline-offset:2px}
 </style>
 </head>
 <body>
@@ -165,7 +191,15 @@
     <div id="unfinishedProductCount" role="status"></div>
   </div>
 
-  <button id="manageWordDictionary" type="button" style="width:100%;margin-top:8px">极限词库管理</button>
+  <div class="utility-controls" aria-label="辅助工具">
+    <button id="manageWordDictionary" type="button" title="打开极限词库管理">极限词库管理</button>
+    <label class="utility-toggle" title="悬停网页图片时显示 PS 按钮，点击置入 Photoshop">
+      <input id="psImageEnabled" type="checkbox"><span>图片置入PS</span>
+    </label>
+    <label class="utility-toggle" title="商品内容稳定加载后自动关闭1688可选弹窗，登录与纯验证页面不自动操作">
+      <input id="autoClose1688Popups" type="checkbox"><span>1688弹窗关闭</span>
+    </label>
+  </div>
   <div class="actions">
     <button id="extract">本月待确认工单</button>
     <button id="stats">待处理+处理中</button>
@@ -176,6 +210,14 @@
     <textarea id="statsText" readonly spellcheck="false"></textarea>
     <button id="copyStats">再次复制统计结果</button>
   </div>
+  <details class="related-tools">
+    <summary class="related-tools-title">相关工具<span class="related-tools-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16" focusable="false"><path d="m4 6 4 4 4-4"/></svg></span></summary>
+    <div class="related-tools-links">
+      <a class="related-tool" href="https://github.com/jeffjiang137/image-slicer-tauri/releases/download/v1.0.41/Xinyang-Designer-1.0.41-x64-setup.exe" target="_blank" rel="noopener noreferrer">鑫洋设计助手桌面版</a>
+      <a class="related-tool" href="https://github.com/jeffjiang137/xinyang-photoshop-cep-assistant/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">鑫洋助手ps插件</a>
+      <a class="related-tool" href="https://image-slicer-web.netlify.app/" target="_blank" rel="noopener noreferrer">拼图助手网页版</a>
+    </div>
+  </details>
   <script src="popup.js"></script>
   <script src="update-check.js"></script>
 </body>
