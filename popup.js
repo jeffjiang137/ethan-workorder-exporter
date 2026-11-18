@@ -220,7 +220,7 @@ operatorNameInput.addEventListener('keydown', (event) => {
   }
 });
 
-extractButton.addEventListener('click', async () => {
+extractButton?.addEventListener('click', async () => {
   statusNode.textContent = '正在设置筛选条件并提取…';
   resultBox.classList.remove('show');
   setBusy(extractButton, true);
@@ -242,7 +242,7 @@ extractButton.addEventListener('click', async () => {
   }
 });
 
-statsButton.addEventListener('click', async () => {
+statsButton?.addEventListener('click', async () => {
   statusNode.textContent = '正在筛选“处理中”“等待处理”…';
   resultBox.classList.remove('show');
   statsText.value = '';
@@ -273,7 +273,7 @@ statsButton.addEventListener('click', async () => {
   }
 });
 
-todayStatsButton.addEventListener('click', async () => {
+todayStatsButton?.addEventListener('click', async () => {
   statusNode.textContent = '正在清除筛选、设置今天并统计…';
   resultBox.classList.remove('show');
   statsText.value = '';
@@ -568,7 +568,7 @@ downloadLinkedProducts.addEventListener('click', async () => {
   try {
     const downloadKinds = Object.fromEntries(Array.from(document.querySelectorAll('[data-download-kind]'), input => [input.dataset.downloadKind, input.checked]));
     if (!Object.values(downloadKinds).some(Boolean)) throw new Error('请至少选择一种素材');
-    const response = await chrome.runtime.sendMessage({type:'ETHAN_DOWNLOAD_LINKED_PRODUCTS', text:productLinksInput.value, downloadKinds});
+    const response = await chrome.runtime.sendMessage({type:'ETHAN_DOWNLOAD_LINKED_PRODUCTS', text:productLinksInput.value, outputMode:(await chrome.storage.local.get('linkedOutputMode')).linkedOutputMode || 'zip', downloadKinds});
     linkStatusNode.textContent = response?.message || '队列已启动，可关闭面板。';
   } catch (error) { linkStatusNode.textContent = ethanChineseError(error.message); }
   finally { downloadLinkedProducts.disabled = false; }
@@ -620,7 +620,7 @@ retryUnfinished.addEventListener('click', async () => {
   const stored = await chrome.storage.local.get('linkedProductRemainingUrls');
   const downloadKinds = Object.fromEntries(Array.from(document.querySelectorAll('[data-download-kind]'), input => [input.dataset.downloadKind,input.checked]));
   if (!Object.values(downloadKinds).some(Boolean)) { linkStatusNode.textContent = '请至少选择一种素材'; return; }
-  const response = await chrome.runtime.sendMessage({type:'ETHAN_DOWNLOAD_LINKED_PRODUCTS',text:(stored.linkedProductRemainingUrls || []).join('\n'),downloadKinds});
+  const response = await chrome.runtime.sendMessage({type:'ETHAN_DOWNLOAD_LINKED_PRODUCTS',text:(stored.linkedProductRemainingUrls || []).join('\n'),outputMode:(await chrome.storage.local.get('linkedOutputMode')).linkedOutputMode || 'zip',downloadKinds});
   linkStatusNode.textContent = response?.message || '';
 });
 
@@ -709,3 +709,9 @@ chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes
 const psImageToggle=document.getElementById('psImageEnabled');
 chrome.storage.local.get({psImageEnabled:true},v=>{psImageToggle.checked=v.psImageEnabled;});
 psImageToggle.addEventListener('change',()=>chrome.storage.local.set({psImageEnabled:psImageToggle.checked}));
+
+const linkedOutputButton=document.getElementById('linkedOutputMode');
+function renderLinkedOutput(mode){linkedOutputButton.textContent=mode!=='img'?'ZIP':'IMG';linkedOutputButton.title=mode!=='img'?'ZIP：本次所有链接合并一个压缩包；点击切换 IMG':'IMG：原格式下载；点击切换 ZIP';}
+chrome.storage.local.get('linkedOutputMode').then(s=>renderLinkedOutput(s.linkedOutputMode));
+linkedOutputButton.onclick=async()=>{linkedOutputButton.disabled=true;try{const s=await chrome.storage.local.get('linkedOutputMode');const mode=s.linkedOutputMode!=='img'?'img':'zip';await chrome.storage.local.set({linkedOutputMode:mode});renderLinkedOutput(mode);}finally{linkedOutputButton.disabled=false;}};
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.linkedOutputMode)renderLinkedOutput(changes.linkedOutputMode.newValue);});

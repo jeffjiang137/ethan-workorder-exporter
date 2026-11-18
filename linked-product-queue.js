@@ -17,10 +17,11 @@ let linkedProductQueueRunning = false;
 let linkedProductQueuePaused = false;
 let linkedProductPauseRequested = false;
 let linkedProductQueueCancelled = false;
+let linkedZipMode=false,linkedZipFinalizing=false;
 const linkedPauseWaiters = [];
 const linkedActiveDownloads = new Set();
 function waitForLinkedResume() {
-  if (linkedProductQueueCancelled && linkedProductQueueRunning) return Promise.reject(new Error('任务已清除'));
+  if (linkedProductQueueCancelled && linkedProductQueueRunning && !linkedZipFinalizing) return Promise.reject(new Error('任务已清除'));
   return linkedProductQueuePaused ? new Promise(resolve => linkedPauseWaiters.push(resolve)) : Promise.resolve();
 }
 async function publishLinkedQueueStatus() {
@@ -29,6 +30,8 @@ async function publishLinkedQueueStatus() {
 const linkedDownloadPaths = new Map();
 
 chrome.downloads.onDeterminingFilename.addListener((download, suggest) => {
+  const kkt = globalThis.ethanKktDownloadFilename?.(download);
+  if(kkt){suggest(kkt);return;}
   const filename = linkedDownloadPaths.get(download.url) || linkedDownloadPaths.get(download.finalUrl);
   if (filename && download.byExtensionId === chrome.runtime.id) {
     suggest({ filename, conflictAction: 'uniquify' });
@@ -49,12 +52,15 @@ async function waitForLinkedPageOpen() {
   if(linkedProductQueueCancelled)throw new Error('任务已结束');
 }
 
-async function runLinkedProductQueue(urls, downloadKinds) {
+async function runLinkedProductQueue(urls, downloadKinds, outputMode = 'zip') {
   await ensureOffscreenDocument();
   await delayMs(180);
   await setOffscreenKeepAlive(true);
   const window = await chrome.windows.create({ url: 'about:blank', focused: true });
   let tab = window.tabs[0];
+  const zipProducts = [];
+  linkedZipMode=outputMode==='zip';
+  let zipAttempted=false;
   let completed = 0;
   let processed = 0;
   const failures = [];
@@ -107,9 +113,16 @@ async function runLinkedProductQueue(urls, downloadKinds) {
         await waitForLinkedPageOpen();
         next = await chrome.tabs.create({ windowId: window.id, url: urls[index + 1], active: false });
       }
-      const result = await requestOffscreenPackage({
-        batchName: product.title || product.offerId, products: [product], directFolderDownload: true, downloadKinds
-      });
+      let result;
+      if (outputMode === 'zip') {
+        zipProducts.push(product);
+        await chrome.storage.local.set({linkedZipCollectedProducts:zipProducts});
+        result = {ok:true};
+      } else {
+        result = await requestOffscreenPackage({
+          batchName: product.title || product.offerId, products: [product], directFolderDownload: true, downloadKinds
+        });
+      }
       if (linkedProductQueueCancelled) break;
       currentFailedFiles = result?.failedCount || 0;
       if (!result?.ok) throw new Error(result?.message || '商品下载失败，已保留标签页');
@@ -132,6 +145,14 @@ async function runLinkedProductQueue(urls, downloadKinds) {
       }
     }
     if (linkedProductQueueCancelled) return;
+    if (outputMode === 'zip' && zipProducts.length) {
+      await notifyMaterialProgress({stage:'zip',title:'正在将本次链接素材合并为一个压缩包'});
+      zipAttempted=true;linkedZipFinalizing=true;
+      const packed = await requestOffscreenPackage({batchName:'链接批量素材_'+Date.now(),products:zipProducts,directFolderDownload:false,downloadKinds});
+      if (!packed?.ok) throw new Error(packed?.message || '批量压缩包生成失败');
+      await chrome.storage.local.remove('linkedZipCollectedProducts');
+      if (linkedProductQueueCancelled) return;
+    }
     await notifyMaterialProgress({
       stage: failures.length ? 'error' : 'done',
       productCount: completed, failedCount: 0,
@@ -146,6 +167,17 @@ async function runLinkedProductQueue(urls, downloadKinds) {
     await chrome.storage.local.set({ linkedProductRemainingUrls: [...failures.map(item => item.url), ...urls.slice(processed)] });
     await notifyMaterialProgress({ stage: 'error', message: ethanChineseError(error.message) + '。剩余链接已保存，可重新打开面板重试。' });
   } finally {
+    if(linkedProductQueueCancelled&&linkedZipMode&&zipProducts.length&&!zipAttempted){
+      linkedZipFinalizing=true;MATERIAL_JOB_STATE.running=true;
+      try{
+        await notifyMaterialProgress({running:true,stage:'zip',title:'任务已结束，正在打包已采集素材'});
+        const partial=await requestOffscreenPackage({batchName:'已完成素材_'+Date.now(),products:zipProducts,directFolderDownload:false,downloadKinds});
+        if(!partial?.ok)throw Error(partial?.message||'打包失败');
+        await chrome.storage.local.remove('linkedZipCollectedProducts');
+        await notifyMaterialProgress({running:false,stage:'done',productCount:zipProducts.length,title:'已采集素材已打包保存'});
+      }catch(error){await notifyMaterialProgress({running:false,stage:'error',message:'已采集素材打包失败：'+ethanChineseError(error.message)+'。采集记录已保留。'});}
+    }
+    linkedZipFinalizing=false;linkedZipMode=false;
     try { await chrome.downloads.setUiOptions({enabled:true}); } catch (_) {}
     linkedProductQueueRunning = false;
     linkedProductQueuePaused = false;
@@ -154,7 +186,7 @@ async function runLinkedProductQueue(urls, downloadKinds) {
     await publishLinkedQueueStatus();
     MATERIAL_JOB_STATE.running = false;
     await setOffscreenKeepAlive(false);
-    if (linkedProductQueueCancelled) {
+    if (linkedProductQueueCancelled && !zipProducts.length) {
       await notifyMaterialProgress({running:false,stage:'',title:'',message:'',failedCount:0});
     }
   }
@@ -164,6 +196,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (['ETHAN_CLEAR_LINK_QUEUE','ETHAN_END_LINK_QUEUE'].includes(message?.type)) {
     (async () => {
       linkedProductQueueCancelled = true;
+      if(linkedProductQueueRunning&&linkedZipMode){
+        linkedProductPauseRequested=false;linkedProductQueuePaused=false;
+        linkedPauseWaiters.splice(0).forEach(resolve=>resolve());
+        await notifyMaterialProgress({running:true,stage:'zip',title:'正在结束采集并保存已有素材，请等待打包完成'});
+        return {ok:true,message:'已停止后续采集，正在保存已采集素材'};
+      }
+
       linkedProductPauseRequested = false;
       linkedProductQueuePaused = false;
       linkedPauseWaiters.splice(0).forEach(resolve => resolve());
@@ -186,7 +225,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     return true;
   }
   if (message?.type === 'ETHAN_LINK_QUEUE_GATE') {
-    waitForLinkedResume().then(() => respond({ok:!(linkedProductQueueCancelled && linkedProductQueueRunning)}),
+    waitForLinkedResume().then(() => respond({ok:!(linkedProductQueueCancelled && linkedProductQueueRunning && !linkedZipFinalizing)}),
       () => respond({ok:false}));
     return true;
   }
@@ -262,7 +301,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   void publishLinkedQueueStatus();
   MATERIAL_JOB_STATE.running = true;
   respond({ ok: true, message: '链接下载队列已启动，每款下载完成后自动关闭对应标签页。' });
-  void runLinkedProductQueue(parsed.urls, message.downloadKinds).catch(async error => {
+  void runLinkedProductQueue(parsed.urls, message.downloadKinds, message.outputMode).catch(async error => {
     linkedProductQueueRunning = false;
     linkedProductQueuePaused = false;
     linkedProductPauseRequested = false;

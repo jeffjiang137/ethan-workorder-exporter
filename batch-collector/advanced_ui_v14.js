@@ -161,6 +161,8 @@ function ethanChineseError(value) {
         .footer{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #e5e7eb;background:#fff}.status{font-size:12px;color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.progress{height:6px;width:170px;background:#e5e7eb;border-radius:99px;overflow:hidden}.progress>i{display:block;height:100%;background:#2563eb;width:0}.select-rect{position:fixed;border:1px solid #2563eb;background:rgba(37,99,235,.13);pointer-events:none;z-index:2147483647}.toast{position:fixed;right:22px;top:22px;z-index:2147483647;background:#111827;color:#fff;padding:10px 14px;border-radius:8px;font-size:13px;box-shadow:0 10px 35px rgba(0,0,0,.25);max-width:380px}.empty{grid-column:1/-1;padding:80px 20px;text-align:center;color:#64748b}.loading{animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.45}}
         @media(max-width:980px){.body{grid-template-columns:1fr}.side{padding:8px}.body{grid-template-columns:minmax(0,1fr) 220px}.tools{grid-template-columns:1fr 110px repeat(2,84px);}.tools .optional{display:none}}
 
+        .check{padding:0;cursor:pointer;font:inherit}.thumb video:not([controls]){cursor:pointer}
+        button{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;line-height:1.2;text-align:center}button[hidden]{display:none!important}.btn{line-height:1.2;align-items:center;justify-content:center}
         /* V14.28: calm workspace, clear selection and responsive controls. */
         .mask{background:rgba(18,28,46,.46);backdrop-filter:blur(6px);font-size:13px;line-height:1.5}
         .panel{width:min(1560px,96vw);height:min(980px,94vh);border-radius:20px;border:1px solid #ffffffb3;box-shadow:0 32px 100px #0f172a38;background:#f6f8fc}
@@ -271,6 +273,23 @@ function ethanChineseError(value) {
     if (bar) bar.style.width = total ? `${Math.min(100, (done / total) * 100)}%` : "0%";
   }
 
+  function fileFormatLabel(item) {
+    const allowed = new Set(['jpg','jpeg','png','webp','gif','svg','avif','bmp','ico','tif','tiff','mp4','webm','mov','m4v','avi','mkv','mp3','wav','ogg','m4a','flac','aac']);
+    const normalize = value => {
+      let name = String(value || '').toLowerCase().split(';')[0].trim().replace(/^(image|video|audio)\//, '').replace(/^\./, '');
+      name = ({jpeg:'jpg',pjpeg:'jpg','svg+xml':'svg',quicktime:'mov',mpeg:'mp3','x-wav':'wav'})[name] || name;
+      return allowed.has(name) ? name.toUpperCase() : '';
+    };
+    const detected = normalize(item.detected?.ext) || normalize(item.detected?.mime);
+    if (detected) return detected;
+    const src = item.originalSrc || item.src || '';
+    if (/^data:/i.test(src)) return normalize(src.match(/^data:([^;,]+)/i)?.[1]) || '格式未知';
+    try {
+      const url = new URL(src);
+      return normalize(url.pathname.match(/\.([a-z0-9]+)$/i)?.[1]) || normalize(url.searchParams.get('format')) || '格式未知';
+    } catch (_) { return '格式未知'; }
+  }
+
   function imageFormat(item) {
     const normalize = value => {
       const name = String(value || "").toLowerCase().replace(/^image\//, "").replace(/^\./, "");
@@ -362,9 +381,9 @@ function ethanChineseError(value) {
       }
       const classes = ["card", item.selected ? "selected" : "", visibleKeys.has(item.key) ? "" : "filtered-out"].filter(Boolean).join(" ");
       const dimension = item.width || item.height ? `${item.width || "?"}×${item.height || "?"}` : "尺寸未知";
-      const rule = item.enhanceRule || item.adapter || item.type;
+      const rule = fileFormatLabel(item);
       return heading + `<article class="${classes}" data-key="${escapeHtml(item.key)}">
-        <div class="thumb">${renderMedia(item)}<span class="check">${item.selected ? "✓" : ""}</span><span class="badge">${escapeHtml(rule)}</span></div>
+        <div class="thumb">${renderMedia(item)}<button type="button" class="check" aria-label="选择素材" aria-pressed="${item.selected}">${item.selected ? "✓" : ""}</button><span class="badge">${escapeHtml(rule)}</span></div>
         <div class="info"><input class="name" data-title-key="${escapeHtml(item.key)}" value="${escapeHtml(item.title)}" title="编辑素材标题">
           <div class="meta"><span>${escapeHtml(item.type)}</span><span>${escapeHtml(dimension)}</span><span>${escapeHtml(displaySource(item))}</span>${item.detected?.ext ? `<span>${escapeHtml(item.detected.ext)}</span>` : ""}</div>
           <a class="source" href="${escapeHtml(item.sourceLink || item.pageUrl || item.src)}" target="_blank" rel="noopener" title="${escapeHtml(item.sourceLink || item.pageUrl || item.src)}">${escapeHtml(item.sourceLink || item.pageUrl || item.src)}</a>
@@ -394,13 +413,20 @@ function ethanChineseError(value) {
   function bindCardEvents(grid) {
     grid.querySelectorAll(".card").forEach((card) => {
       card.addEventListener("click", (event) => {
-        if (event.target.closest("input,a,video,audio")) return;
+        if (event.target.closest("input,a,audio,video[controls]")) return;
         const item = findItem(card.dataset.key);
         if (!item) return;
         selectCard(item, event.shiftKey);
-        if (event.shiftKey) return renderGrid();
-        card.classList.toggle("selected", item.selected);
-        card.querySelector(".check").textContent = item.selected ? "✓" : "";
+        const changedCards = event.shiftKey ? grid.querySelectorAll('.card') : [card];
+        changedCards.forEach(node => {
+          const value = findItem(node.dataset.key);
+          if (!value) return;
+          node.classList.toggle('selected', value.selected);
+          const check = node.querySelector('.check');
+          const mark = value.selected ? '✓' : '';
+          if (check.textContent !== mark) check.textContent = mark;
+          check.setAttribute('aria-pressed', String(value.selected));
+        });
         updateCountOnly();
       });
     });
@@ -1034,11 +1060,11 @@ function ethanChineseError(value) {
         setStatus('词库检测完成，命中项请结合图片语境核对');
       } finally {checkWords.disabled=false;checkWords.textContent='极限词查询';}
     };
-    const previewStyle=document.createElement('style');previewStyle.textContent='.thumb{position:relative}.product-zoom{position:absolute;right:8px;bottom:8px;z-index:3;border:0;border-radius:6px;background:#ffffffed;font-size:22px;cursor:zoom-in;opacity:0}.thumb:hover .product-zoom,.product-zoom:focus{opacity:1}';state.root.append(previewStyle);
+    const previewStyle=document.createElement('style');previewStyle.textContent='.thumb{position:relative}.product-zoom{position:absolute;right:8px;bottom:8px;z-index:3;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid rgba(255,255,255,.18);border-radius:7px;background:rgba(15,23,42,.62);color:#fff;box-shadow:0 2px 6px #0002;backdrop-filter:blur(4px);cursor:zoom-in;opacity:0;transition:opacity .15s,background .15s}.product-zoom svg{display:block;pointer-events:none}.thumb:hover .product-zoom,.product-zoom:focus-visible{opacity:1}.product-zoom:hover{background:rgba(15,23,42,.82)}.product-zoom:focus-visible{outline:2px solid #93b8ff;outline-offset:2px}';state.root.append(previewStyle);
     const grid=state.root.querySelector('[data-role="grid"]');
     const addZoomButtons=()=>grid.querySelectorAll('.card').forEach(card=>{
       const item=findItem(card.dataset.key);if(item?.type!=='image'||card.querySelector('.product-zoom'))return;
-      const button=document.createElement('button');button.className='product-zoom';button.textContent='⌕';button.title='查看原图';button.setAttribute('aria-label','查看原图');
+      const button=document.createElement('button');button.className='product-zoom';button.type='button';button.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';button.title='查看原图';button.setAttribute('aria-label','查看原图');
       button.onclick=event=>{
         event.stopPropagation();const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;background:#000c;z-index:2147483647;display:flex;align-items:center;justify-content:center;cursor:zoom-out';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-label','原图预览');
         const image=document.createElement('img');image.src=item.originalSrc||item.src;image.style.cssText='max-width:96vw;max-height:96vh;object-fit:contain;cursor:default';image.onclick=event=>event.stopPropagation();overlay.append(image);

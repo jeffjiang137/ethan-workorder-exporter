@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ethan 工单助手",
-  "version": "1.0.50",
+  "version": "1.0.51",
   "description": "Ethan 工单管理快捷工具：将模版错写及模板主图别名统一统计为模板。",
   "permissions": [
     "clipboardWrite",
@@ -123,6 +123,29 @@
       ],
       "js": [
         "ps-images.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://www.koukoutu.com/removebgtool/*",
+        "https://koukoutu.com/removebgtool/*"
+      ],
+      "js": [
+        "koukoutu/page-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://www.koukoutu.com/removebgtool/*",
+        "https://koukoutu.com/removebgtool/*"
+      ],
+      "js": [
+        "koukoutu/content.js"
       ],
       "run_at": "document_idle",
       "all_frames": true

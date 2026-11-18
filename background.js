@@ -93,7 +93,8 @@ async function ensureContextMenu() {
   chrome.contextMenus.create({
     id: 'ethan-save-image',
     title: '保存图片',
-    contexts: ['image']
+    contexts: ['all'],
+    documentUrlPatterns: ['*://*.1688.com/*','*://item.taobao.com/*','*://detail.tmall.com/*']
   });
 
   chrome.contextMenus.create({
@@ -221,6 +222,7 @@ function renderMaterialProgress(progress) {
 }
 
 function publishMaterialProgress(payload) {
+  void chrome.storage.local.set({ethanDownloadRunning:!!MATERIAL_JOB_STATE.running}).catch(()=>{});
   const now = Date.now();
   if (now - materialProgressLastUpdate < 250 && !['done', 'error', 'zip'].includes(payload.stage)) return;
   materialProgressLastUpdate = now;
@@ -962,6 +964,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (owner.dataListLoading) throw new Error('切换每页50条超时，请重试');
         return {ok:true};
       }
+      if (action === 'operator') {
+        if (owner.dataListLoading) throw new Error('工单列表正在查询，请稍后切换操作人员');
+        const form = owner.dataForm;
+        const snapshot = JSON.stringify(form);
+        const words = structuredClone(form.words || []);
+        const matching = words.filter(row => row.col === 'cust_service_list-opr_user');
+        if (matching.length) matching.forEach(row => {row.word=operator;});
+        else words.push({andor:'and',col:'cust_service_list-opr_user',colType:'varchar',con:'eq',word:operator});
+        const data = {...structuredClone(form), words, page:1};
+        const response = await owner.$http({url:owner.$http.adornUrl('/workorder/search/list'),method:'post',timeout:20000,
+          data:owner.$http.adornData({forumName:owner.forumName,data})});
+        const result=response.data;
+        if(result?.code!==0||!Array.isArray(result.page?.list))throw new Error(result?.msg||'切换操作人员查询失败');
+        if(JSON.stringify(form)!==snapshot||!root.isConnected)throw new Error('筛选条件已变化，请重新切换操作人员');
+        table.clearSelection?.();
+        Object.assign(form,{words,page:1,total:result.page.totalCount});
+        owner.dataList=result.page.list;
+        await owner.$nextTick();
+        return {ok:true,rowCount:result.page.list.length};
+      }
       if (!['query', 'month', 'today'].includes(action)) throw new Error('不支持的列表操作');
       if (owner.dataListLoading) throw new Error('工单列表正在查询，请稍后重试');
       const form = owner.dataForm;
@@ -970,9 +992,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const limit = 50;
       const monthly = action === 'month';
       const todayOnly = action === 'today';
-      const singleQuery = monthly || todayOnly;
+      const singleQuery = ['query','month','today'].includes(action);
       const dates = [];
-      if (singleQuery) {
+      if (monthly || todayOnly) {
         const today = new Date();
         const year = today.getFullYear();
         const month = today.getMonth();
@@ -987,6 +1009,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const response = await owner.$http({
           url: owner.$http.adornUrl('/workorder/search/list'),
           method: 'post',
+          timeout: 20000,
           data: owner.$http.adornData({ forumName: owner.forumName, data: {
             ...form, searchType: '', sysMenuId: 0, dates, words,
             page: 1, limit, orderBy: 'id', order: 'desc'
@@ -996,12 +1019,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (result?.code !== 0 || !Array.isArray(result.page?.list)) {
           throw new Error(result?.msg || `“${status}”查询失败`);
         }
-        if ((!singleQuery || todayOnly) && result.page.totalCount > result.page.list.length) {
+        if (!['query','month','today'].includes(action) && result.page.totalCount > result.page.list.length) {
           throw new Error(`“${status}”超过每页 ${limit} 条，无法完整合并`);
         }
         return { rows: result.page.list, total: result.page.totalCount, words };
       };
-      const statuses = todayOnly ? [''] : monthly ? ['等待客户确认'] : ['处理中', '等待处理'];
+      const statuses = todayOnly ? [''] : monthly ? ['等待客户确认'] : ['等待处理'];
       const results = await Promise.all(statuses.map(queryStatus));
       if (!root.isConnected || owner.dataListLoading || owner.dataList !== originalRows || JSON.stringify(form) !== snapshot) {
         throw new Error('查询期间工单列表已更新，请重试联合查询');
@@ -1120,3 +1143,46 @@ importScripts("image-word-check-background.js");
 importScripts("ps-image-background.js");
 
 importScripts("context-image-background.js");
+
+chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+ if(message?.type==='ETHAN_START_CUTOUT'){
+  (async()=>{await ensureOffscreenDocument();
+   let ready=false;for(let i=0;i<30;i++){try{ready=(await chrome.runtime.sendMessage({type:'ETHAN_CUTOUT_READY'}))?.ok;if(ready)break;}catch(_){}await delayMs(100);}
+   if(!ready)throw Error('后台抠图页面未就绪，请重新加载插件后重试');
+   return chrome.runtime.sendMessage({type:'ETHAN_RUN_CUTOUT',jobId:message.jobId,mode:message.mode});})().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+ }
+ if(message?.type==='ETHAN_CUTOUT_PROGRESS'&&sender.url===chrome.runtime.getURL('material-packager.html')){
+  chrome.storage.local.set({cutoutProgress:message.progress}).then(()=>reply({ok:true}),()=>reply({ok:false}));return true;
+ }
+ if(message?.type==='ETHAN_CUTOUT_SAVE'&&sender.url===chrome.runtime.getURL('material-packager.html')){
+  (async()=>{
+   const id=await chrome.downloads.download({url:message.url,filename:message.filename,saveAs:false,conflictAction:'uniquify'});
+   while(true){const [item]=await chrome.downloads.search({id});if(item?.state==='complete')return {ok:true};if(!item||item.state==='interrupted')throw Error('下载中断');await delayMs(300);}
+  })().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+ }
+});
+
+chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+ if(message?.type==='ETHAN_DESKTOP_HEALTH'){
+  (async()=>{try{const health=await(await fetch('http://127.0.0.1:8866/health',{signal:AbortSignal.timeout(3000)})).json();if(health.ok){await chrome.storage.local.set({ethanDesktopSeen:true});return {ok:true,ready:!!health.paddleAvailable};}}catch(_){}const stored=await chrome.storage.local.get('ethanDesktopSeen');return {ok:false,seen:!!stored.ethanDesktopSeen};})().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+ }
+ if(message?.type==='ETHAN_DOWNLOAD_DESKTOP'){
+  (async()=>{const r=await fetch('https://api.github.com/repos/jeffjiang137/image-slicer-tauri/releases/latest',{cache:'no-store',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('无法获取最新版，请检查网络');const release=await r.json();const assets=(release.assets||[]).filter(a=>/(?:x64|x86_64).*setup\.exe$/i.test(a.name));if(release.draft||release.prerelease||assets.length!==1)throw Error('最新版安装包尚未就绪');const url=assets[0].browser_download_url;if(!url.startsWith('https://github.com/jeffjiang137/image-slicer-tauri/releases/download/'))throw Error('安装包地址无效');await chrome.downloads.download({url,saveAs:true});return {ok:true};})().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+ }
+});
+
+importScripts('koukoutu/background.js');
+chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+ if(message?.type!=='ETHAN_KKT_START')return false;
+ (async()=>{
+  const tabs=await chrome.tabs.query({url:'https://www.koukoutu.com/removebgtool/*'});
+  const tab=tabs[0]||await chrome.tabs.create({url:'https://www.koukoutu.com/removebgtool/all',active:true});
+  await chrome.tabs.update(tab.id,{active:true});
+  let response;
+  for(let i=0;i<60;i++){
+   try{response=await chrome.tabs.sendMessage(tab.id,{type:'ETHAN_KKT_IMPORT',files:message.files});if(response?.ok)return response;if(response?.message&&!response.message.includes('未就绪'))throw Error(response.message);}catch(error){if(!/Receiving end|Could not establish|未就绪/.test(error.message))throw error;}
+   await delayMs(500);
+  }
+  throw Error('抠抠图页面未就绪，请完成页面加载或登录后重试');
+ })().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+});

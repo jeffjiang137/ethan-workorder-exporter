@@ -27,13 +27,6 @@ async function recognizeWordImage(url) {
     if(!response.ok) throw new Error('图片读取失败 HTTP '+response.status);
     const blob=await response.blob();
     const work=wordOcrQueue.then(async()=>{
-      if(Date.now()>wordOcrHealthUntil){
-        let health;
-        try{health=await(await fetch('http://127.0.0.1:8866/health',{signal:AbortSignal.timeout(3000)})).json();}
-        catch(_){throw new Error('请启动鑫洋设计助手中的本地 OCR 服务（8866）');}
-        if(!health.ok||!health.paddleAvailable)throw new Error('本地服务的 PaddleOCR 尚未就绪');
-        wordOcrHealthUntil=Date.now()+15000;
-      }
       const form=new FormData();form.append('image',blob,'product-image.'+(blob.type.includes('png')?'png':blob.type.includes('webp')?'webp':'jpg'));
       const result=await(await fetch('http://127.0.0.1:8866/ocr',{method:'POST',body:form,signal:AbortSignal.timeout(150000)})).json();
       if(!result.ok)throw new Error(result.error||result.message||'PaddleOCR 识别失败');

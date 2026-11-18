@@ -16,8 +16,8 @@ function ethanChineseError(value) {
   'use strict';
 
   // 使用版本化标记，避免扩展升级后旧脚本留下的通用标记阻止新脚本重新注入。
-  const SCRIPT_INSTANCE_KEY = '__ETHAN_WORKORDER_EXPORTER_V1_0_47_NATIVE_COMBINED_50_SORT__';
-  const EXTENSION_VERSION = '1.0.47';
+  const SCRIPT_INSTANCE_KEY = '__ETHAN_WORKORDER_EXPORTER_TODAY_COPY_V6__';
+  const EXTENSION_VERSION = chrome.runtime.getManifest().version;
   if (window[SCRIPT_INSTANCE_KEY]) return;
   window[SCRIPT_INSTANCE_KEY] = true;
   try { delete window.__ETHAN_WORKORDER_EXPORTER__; } catch (error) { /* 忽略 */ }
@@ -1722,7 +1722,7 @@ function ethanChineseError(value) {
     if (!filtered.ok) return filtered;
 
     if (!filtered.rowCount) {
-      const message = '未查到等待处理或处理中的工单';
+      const message = '未查到等待处理的工单';
       showToast(message);
       return { ...filtered, statsMessage: message };
     }
@@ -1730,10 +1730,17 @@ function ethanChineseError(value) {
     return { ...filtered, text: stats.text, copied: stats.copied, statsMessage: stats.message };
   }
 
+  function sendWorkorderRequest(message) {
+    return new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('工单查询超时，请确认网站原生查询可用后重试；若刚更新插件，请先刷新工单页')),25000);
+      chrome.runtime.sendMessage(message).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error);});
+    });
+  }
+
   async function showCombinedWorkOrders(actionOptions = {}) {
     const savedName = normalizeOperatorOverride(actionOptions.operatorName)
       || await getSavedOperatorName(Boolean(actionOptions.forceOperatorRefresh));
-    const result = await chrome.runtime.sendMessage({
+    const result = await sendWorkorderRequest({
       type: 'ETHAN_NATIVE_COMBINED_ROWS',
       action: 'query',
       operator: getOperatorTarget(savedName).preferredText
@@ -1906,7 +1913,7 @@ function ethanChineseError(value) {
   async function runExtractAction(actionOptions = {}) {
     const savedName = normalizeOperatorOverride(actionOptions.operatorName)
       || await getSavedOperatorName(Boolean(actionOptions.forceOperatorRefresh));
-    const prepared = await chrome.runtime.sendMessage({
+    const prepared = await sendWorkorderRequest({
       type: 'ETHAN_NATIVE_COMBINED_ROWS',
       action: 'month',
       operator: getOperatorTarget(savedName).preferredText
@@ -2087,7 +2094,7 @@ function ethanChineseError(value) {
   async function runTodayCompletedStatsAction(actionOptions = {}) {
     const savedName = normalizeOperatorOverride(actionOptions.operatorName)
       || await getSavedOperatorName(Boolean(actionOptions.forceOperatorRefresh));
-    const prepared = await chrome.runtime.sendMessage({
+    const prepared = await sendWorkorderRequest({
       type: 'ETHAN_NATIVE_COMBINED_ROWS', action: 'today',
       operator: getOperatorTarget(savedName).preferredText
     });
@@ -2095,13 +2102,8 @@ function ethanChineseError(value) {
       showError(prepared?.message || '今日完成查询失败');
       return prepared || { ok: false };
     }
-    // 统计后生成纵向汇总表格（服务类型|数量），自动复制到剪贴板并弹出预览
-    const result = extractServiceStats();
-    if (!result.ok) {
-      showError(result.message);
-      return result;
-    }
-    return showTodayStatsTable(result);
+    hideModal();
+    return extractStatsAndCopy();
   }
 
   // 页面内快捷按钮：固定定位到“常用快捷查询”左侧。
@@ -2238,12 +2240,13 @@ function ethanChineseError(value) {
     button.type = 'button';
     button.className = 'el-button el-button--success el-button--small is-plain ethan-page-action';
     button.dataset.label = label;
+    button.dataset.workorderAction = mode;
     button.textContent = label;
     button.title = mode === 'extract'
       ? '提取本月待确认工单并生成表格'
       : mode === 'todayStats'
         ? '清除其他筛选，设置完成时间为今天并复制服务类型统计'
-        : '联合查看等待处理和处理中的工单';
+        : '查看等待处理的工单';
 
     button.addEventListener('click', async (event) => {
       event.preventDefault();
@@ -2278,6 +2281,12 @@ function ethanChineseError(value) {
     const existing = document.getElementById(PAGE_ACTIONS_ID);
     if (existing) {
       pageActionWrapper = existing;
+      // Repair toolbars retained from an earlier content-script instance.
+      if (!existing.querySelector('[data-workorder-action="todayStats"]')) {
+        const todayButton = createPageActionButton('今日完成工单', 'todayStats');
+        const stats = Array.from(existing.children).find(node => node.dataset.label === '待处理');
+        if (stats) stats.after(todayButton); else existing.prepend(todayButton);
+      }
       // 修复旧版可能被插入到网站工具栏内部的问题，移到 body，避免影响原按钮布局。
       if (existing.parentElement !== document.body && document.body) {
         document.body.appendChild(existing);
@@ -2291,7 +2300,8 @@ function ethanChineseError(value) {
     wrapper.setAttribute('data-visible', 'false');
     wrapper.append(
       createPageActionButton('本月待确认工单', 'extract'),
-      createPageActionButton('待处理+处理中', 'stats')
+      createPageActionButton('待处理', 'stats'),
+      createPageActionButton('今日完成工单', 'todayStats')
     );
     (document.body || document.documentElement).appendChild(wrapper);
     pageActionWrapper = wrapper;
@@ -2767,7 +2777,7 @@ function ethanChineseError(value) {
       if (result?.ok) {
         markAutoAppliedDefaultFilters();
         autoDefaultFilterAttempts = 0;
-        showToast(`已自动查询${savedOperatorName}的待处理和处理中工单，共 ${result.rowCount} 条`, 3200);
+        showToast(`已自动查询${savedOperatorName}的待处理工单，共 ${result.rowCount} 条`, 3200);
         return true;
       }
       if (autoDefaultFilterAttempts < 12) {
@@ -2884,13 +2894,13 @@ function ethanChineseError(value) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local' || !changes[OPERATOR_STORAGE_KEY]) return;
       cachedOperatorName = normalizeOperatorOverride(changes[OPERATOR_STORAGE_KEY].newValue);
-      try {
-        sessionStorage.removeItem(AUTO_APPLY_DEFAULT_FILTERS_KEY);
-      } catch (error) {
-        // 忽略会话存储异常。
-      }
-      autoDefaultFilterAttempts = 0;
-      scheduleAutoApplyDefaultFilters(260);
+      markAutoAppliedDefaultFilters();
+      clearTimeout(autoDefaultFilterRetryTimer);
+      const operatorName = cachedOperatorName;
+      if (!isWorkOrderPageActive()) return;
+      void chrome.runtime.sendMessage({type:'ETHAN_NATIVE_COMBINED_ROWS',action:'operator',operator:getOperatorTarget(operatorName).preferredText})
+        .then(result=>{if(!result?.ok)showError(result?.message||'切换操作人员查询失败');else showToast('已按当前筛选查询'+operatorName+'的工单');})
+        .catch(error=>showError(ethanChineseError(error.message)));
     });
   }
 
