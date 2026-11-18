@@ -68,6 +68,7 @@
 
   function isOwnElement(element) {
     if (!element) return false;
+    if (element.closest?.('#ethan-kkt-waiting')) return true;
     const root = document.getElementById(ROOT_ID);
     return Boolean(root && (element === root || root.contains(element) || element.getRootNode?.().host === root));
   }
@@ -78,7 +79,7 @@
     if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
     const rect = element.getBoundingClientRect();
     if (rect.width <= 2 || rect.height <= 2) return false;
-    if (allowOffscreen) return true;
+    if (allowOffscreen || new URLSearchParams(location.search).get('ethanEmbedded')==='1') return true;
     return rect.bottom > 0 && rect.top < innerHeight * 1.8;
   }
 

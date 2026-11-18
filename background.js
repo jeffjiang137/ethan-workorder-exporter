@@ -1012,7 +1012,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           timeout: 20000,
           data: owner.$http.adornData({ forumName: owner.forumName, data: {
             ...form, searchType: '', sysMenuId: 0, dates, words,
-            page: 1, limit, orderBy: 'id', order: 'desc'
+            page: 1, limit, orderBy: 'cust_service_list-plan_complete', order: 'asc'
           } })
         });
         const result = response.data;
@@ -1057,7 +1057,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const { rows, total, words } = results[0];
         table.clearSelection?.();
         Object.assign(form, {
-          searchType: '', sysMenuId: 0, page: 1, limit, total, orderBy: 'id', order: 'desc',
+          searchType: '', sysMenuId: 0, page: 1, limit, total, orderBy: 'cust_service_list-plan_complete', order: 'asc',
           dates: fillFilterRows(form.dates, dates, defaultDates, 'date'),
           words: fillFilterRows(form.words, words, defaultWords, 'word')
         });

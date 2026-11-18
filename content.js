@@ -39,6 +39,7 @@ function ethanChineseError(value) {
     infoService: ['信息服务', '信息服务内容', '信息项目', '信息类服务'],
     optimizeService: ['优化服务', '优化服务内容', '优化项目', '优化类服务'],
     otherService: ['其他服务', '其他服务内容', '其他项目', '其他类服务'],
+    dealResult: ['处理结果'],
     orderQuantity: ['下单数量', '下单数', '订单数量', '服务数量', '制作数量']
   };
 
@@ -55,6 +56,7 @@ function ethanChineseError(value) {
   const EMPTY_MARKERS = new Set(['', '-', '--', '—', '无', '暂无', '未选择', '未填写', 'null', 'undefined', '/']);
 
   const SERVICE_RULES = [
+    [/信息\s*套版|^套版$/, '套版'],
     [/店铺首页|首页装修|首页设计|首页/, '首页'],
     // “模板/主图设计”属于模板服务；模板规则必须优先于所有主图规则。
     [/模板\s*[\/／]\s*主图(?:设计)?|模板设计|模板/, '模板'],
@@ -82,6 +84,7 @@ function ethanChineseError(value) {
 
   // “待处理工单”统计时使用。顺序即最终文本中的优先输出顺序。
   const SERVICE_STAT_RULES = [
+    ['套版', /信息\s*套版|^套版$/i],
     ['首页', /店铺首页|首页装修|首页设计|首页/i],
     ['模板', /模板(?:设计)?/i],
     ['简易主图', /简易\s*主图(?:设计)?/i],
@@ -1656,7 +1659,7 @@ function ethanChineseError(value) {
     return { ok: true, rows: rowItems.map((item) => item.cells), candidate };
   }
 
-  function extractServiceStats() {
+  function extractServiceStats({ completedQuantity = false } = {}) {
     const candidate = bestCandidate();
     if (!candidate) {
       return { ok: false, message: '未找到页面表格。请确认筛选结果已显示后再试。' };
@@ -1669,10 +1672,11 @@ function ethanChineseError(value) {
         message: `未识别“设计服务/信息服务”字段。当前表头：${candidate.headers.filter(Boolean).join('｜') || '无'}`
       };
     }
-    if (mapping.orderQuantity == null) {
+    const quantityField = completedQuantity ? 'dealResult' : 'orderQuantity';
+    if (mapping[quantityField] == null) {
       return {
         ok: false,
-        message: `未识别“下单数量”字段。当前表头：${candidate.headers.filter(Boolean).join('｜') || '无'}`
+        message: `未识别“${completedQuantity ? '处理结果' : '下单数量'}”字段。当前表头：${candidate.headers.filter(Boolean).join('｜') || '无'}`
       };
     }
 
@@ -1688,7 +1692,10 @@ function ethanChineseError(value) {
 
       const designService = valueAt(cells, mapping, 'designService');
       const infoService = valueAt(cells, mapping, 'infoService');
-      const quantity = parseOrderQuantity(valueAt(cells, mapping, 'orderQuantity'));
+      const rawQuantity = valueAt(cells, mapping, quantityField);
+      const quantity = completedQuantity
+        ? Math.max(0, Number(normalizeText(rawQuantity).replace(/,/g, '')) || 0)
+        : parseOrderQuantity(rawQuantity);
       const categories = serviceCategories(designService, infoService);
       if (!categories.length || quantity <= 0) continue;
 
@@ -2012,8 +2019,8 @@ function ethanChineseError(value) {
     return true;
   }
 
-  async function extractStatsAndCopy() {
-    const result = extractServiceStats();
+  async function extractStatsAndCopy(options = {}) {
+    const result = extractServiceStats(options);
     if (!result.ok) {
       showError(result.message);
       return result;
@@ -2103,7 +2110,7 @@ function ethanChineseError(value) {
       return prepared || { ok: false };
     }
     hideModal();
-    return extractStatsAndCopy();
+    return extractStatsAndCopy({ completedQuantity: true });
   }
 
   // 页面内快捷按钮：固定定位到“常用快捷查询”左侧。

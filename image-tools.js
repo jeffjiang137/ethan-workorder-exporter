@@ -86,7 +86,7 @@
   const downloadPanel=document.querySelector('.link-tools');
   for(const [id,value] of [['openDownload','download'],['openStitch','stitch'],['openCutout','cutout']]) document.getElementById(id).onclick=()=>{
     if(busy)return;
-    mode=value;downloadPanel.hidden=value!=='download';panel.hidden=value==='download';modeRow.hidden=value!=='cutout';document.getElementById('cutoutInstallHint').hidden=value!=='cutout';
+    mode=value;document.getElementById('promptPanel').hidden=true;downloadPanel.hidden=value!=='download';panel.hidden=value==='download';document.getElementById('openPrompts').setAttribute('aria-pressed','false');modeRow.hidden=value!=='cutout';document.getElementById('cutoutInstallHint').hidden=value!=='cutout';
     zone.textContent=value==='stitch'?'拖放或粘贴图片，可继续添加':'拖放或粘贴图片，也可拖入文件夹';status.textContent='';renderQueue();renderCutoutPreview();syncEmbedded();
     for(const [key,val] of [['openDownload','download'],['openStitch','stitch'],['openCutout','cutout']])document.getElementById(key).setAttribute('aria-pressed',String(value===val));
   };

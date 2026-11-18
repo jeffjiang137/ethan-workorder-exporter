@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Ethan 工单助手",
-  "version": "1.0.51",
-  "description": "Ethan 工单管理快捷工具：将模版错写及模板主图别名统一统计为模板。",
+  "version": "1.0.52",
+  "description": "Ethan 工单管理与素材助手：提示词模板管理、图片工具及工单统计。",
   "permissions": [
     "clipboardWrite",
     "activeTab",
