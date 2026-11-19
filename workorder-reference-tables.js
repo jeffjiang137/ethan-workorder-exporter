@@ -4,15 +4,13 @@
   const timing = [
     ['诚信通首页装修','5个工作日（下单当天算时间）'],
     ['二级页面、模板设计','3个工作日（其他下单当天不算时间）'],
-    ['海报≤4张','3个工作日'],['海报≥5张','5个工作日'],
-    ['信息新增、信息替换、极限词、方正字体修改等','1–3条：1个工作日；+7=10条：2个；+10=20条：3个；+20=40条：4个；+20=60条：5个'],
-    ['简易发布','1–10条：1个工作日；+15=25条：2个；+15=40条：3个；+20=60条：4个'],
-    ['图片处理','1–10张：当天；+40=50张：1个工作日；+50=100张：2个；+200=300张：3个'],
+    ['海报','≤4张：3个工作日；≥5张：5个工作日'],
     ['主图设计','1–3张：1个工作日；+4=7张：2个；8张以上：3个'],
-    ['店招/优惠券/关联营销/在线旺旺/悬浮窗/侧边导航','2个工作日'],
-    ['相册封面/侧边产品分类','1个工作日'],
-    ['手机端装修（重新设计并上传）','5个工作日'],['手机端装修（与PC端同步）','2个工作日'],['修改海报尺寸或小修改','1个工作日'],
-    ['说明','如有加急、特殊情况，提前与运营及客户沟通。方正字体修改：①重新发布按信息替换来算积分；②不需要重新套版修改，按照极限词修改的类目算积分。']
+    ['信息新增、信息替换、极限词、方正字体修改等','1–3条：1个工作日；+7=10条：2个；+10=20条：3个；+20=40条：4个；+20=60条：5个'],
+    ['图片处理','1–10张：当天；+40=50张：1个工作日；+50=100张：2个；+200=300张：3个'],
+    ['手机端装修（重新设计并上传）','5个工作日'],['手机端装修（与PC端同步）','2个工作日'],
+    ['店招/优惠券/关联营销/在线旺旺/悬浮窗/侧边导航','2个工作日', true],
+    ['说明','如有加急、特殊情况，提前与运营及客户沟通。方正字体修改：①重新发布按信息替换来算积分；②不需要重新套版修改，按照极限词修改的类目算积分。', true]
   ];
   const ratios = [
     ['1∶1','诚信通店铺设计'],['1∶1','海报设计/自定义设计'],['1∶1（模板或首页）','二级页面952px宽/1920px宽'],
@@ -27,7 +25,7 @@
   style.textContent = `.ethan-reference{position:fixed;box-sizing:border-box;padding:10px;border:1px solid #dbe9e52e;border-radius:9px;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);color:#edf3f4;box-shadow:0 8px 28px #0002;overflow:hidden;font:12px/1.4 Arial,sans-serif;pointer-events:auto}.ethan-reference h3{margin:0 0 7px;font-size:14px;color:#bde8d7}.ethan-reference table{width:100%;border-collapse:collapse;table-layout:fixed}.ethan-reference td,.ethan-reference th{padding:4px 6px;border:1px solid #d6e6e526;text-align:left;vertical-align:top;overflow-wrap:anywhere}.ethan-reference th{background:transparent;color:#c9e7dd}.ethan-reference tbody tr:nth-child(even){background:rgba(255,255,255,.05)}.ethan-reference th:first-child{width:32%}`;
   document.head.append(style);
   const timingStyle = document.createElement('style');
-  timingStyle.textContent = `.ethan-timing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}.ethan-timing-item{min-width:0;padding:7px 8px;border-top:1px solid #ffffff26}.ethan-timing-item:nth-child(even){background:rgba(255,255,255,.05)}.ethan-timing-item h4{margin:0 0 6px;color:#edf3f4;font-size:1em;line-height:1.5}.ethan-timing-item p{margin:3px 0;color:#edf3f4;line-height:1.55;overflow-wrap:anywhere}.ethan-timing-item:last-child{grid-column:1/-1}.ethan-reference.ethan-timing h3{margin-bottom:10px}`;
+  timingStyle.textContent = `.ethan-timing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.ethan-timing-item{min-width:0;padding:7px 9px;border:1px solid #ffffff20;border-radius:5px;background:#ffffff0b}.ethan-timing-item h4{margin:0 0 6px;color:#edf3f4;font-size:1em;line-height:1.5}.ethan-timing-item p{margin:3px 0;color:#edf3f4;line-height:1.55;overflow-wrap:anywhere}.ethan-timing-item-wide{grid-column:1/-1}.ethan-reference.ethan-timing h3{margin-bottom:10px}`;
   document.head.append(timingStyle);
   function timingPanel() {
     const box = document.createElement('aside');
@@ -37,9 +35,10 @@
     title.textContent = '任务制作时间规范';
     const grid = document.createElement('div');
     grid.className = 'ethan-timing-grid';
-    for (const [name, content] of timing) {
+    for (const [name, content, fullWidth] of timing) {
       const item = document.createElement('section');
       item.className = 'ethan-timing-item';
+      if (fullWidth) item.classList.add('ethan-timing-item-wide');
       const heading = document.createElement('h4');
       heading.textContent = name;
       item.append(heading);

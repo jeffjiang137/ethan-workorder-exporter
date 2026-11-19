@@ -701,6 +701,7 @@
     while (Date.now() - startedAt < timeoutMs) {
       if (state.stopRequested) throw new Error('任务已停止');
       while (state.paused && !state.stopRequested) await sleep(250);
+      if (state.stopRequested) throw new Error('任务已停止');
       const result = await predicate();
       if (result) return result;
       if (onTick) await onTick(Date.now() - startedAt);
@@ -796,19 +797,24 @@
     const directEntry = isDirectDownloadEntry(entry);
     const nonce = uid();
     await runtimeMessage({ type: 'KKT_ARM_DOWNLOAD', nonce, filename });
-    syntheticClick(entry);
-    log(`${directEntry ? '已点击直接下载控件' : '已点击“下载图片(PNG)”按钮'}：${textOf(entry) || '无文字控件'}`);
     try {
-      if (directEntry) {
+      syntheticClick(entry);
+      log(`已点击下载入口：${textOf(entry) || '无文字控件'}`);
+      const { option, started } = await waitUntil(async () => {
+        const response = await runtimeMessage({ type: 'KKT_GET_ARM_STATUS', nonce });
+        if (response.arm?.downloadId != null) return { started: true };
+        const option = findDownloadOptionControl();
+        return option ? { option } : null;
+      }, {
+        timeoutMs: Math.min(timeoutMs, directEntry ? 30_000 : 15_000),
+        intervalMs: 300
+      });
+      if (started) {
         const result = await waitArmedDownload(nonce, Math.min(timeoutMs, 90_000));
         closeSuccessModal();
         return result;
       }
 
-      const option = await waitUntil(() => findDownloadOptionControl(), {
-        timeoutMs: Math.min(timeoutMs, 15_000),
-        intervalMs: 300
-      });
       // Save the dialog before clicking the option. The site may re-render/remove
       // the option immediately after the download starts.
       const downloadModal = findDownloadModalContainer(option);
@@ -816,7 +822,7 @@
       log(`已点击左侧“标清下载”按钮：${textOf(option) || '标清下载'}`);
       const result = await waitArmedDownload(nonce, Math.min(timeoutMs, 90_000));
       try {
-        await waitUntil(() => closeDownloadModal(downloadModal), {
+        await waitUntil(() => !visible(downloadModal, { allowOffscreen: true }) || closeDownloadModal(downloadModal), {
           timeoutMs: Math.min(timeoutMs, 8_000),
           intervalMs: 300
         });
@@ -825,7 +831,7 @@
       }
       return result;
     } finally {
-      runtimeMessage({ type: 'KKT_DISARM_DOWNLOAD', nonce }).catch(() => {});
+      await runtimeMessage({ type: 'KKT_DISARM_DOWNLOAD', nonce }).catch(() => {});
       state.lastDownloadMessages.delete(nonce);
     }
   }
@@ -895,10 +901,9 @@
               staleResultIgnored = true;
               log(`检测到上一张图片的结果仍在页面中，等待网页切换到：${item.file.name}`);
             }
-            return null;
           }
 
-          if (downloadEntry) {
+          if (freshResult && downloadEntry) {
             if (!downloadLogged) {
               downloadLogged = true;
               log(`已识别下载入口：${textOf(downloadEntry) || '无文字控件'}`);
@@ -906,7 +911,7 @@
             return downloadEntry;
           }
 
-          if (success && !successSeen) {
+          if (freshResult && success && !successSeen) {
             successSeen = true;
             item.message = '网页显示抠图成功，等待下载入口';
             render();
@@ -918,7 +923,8 @@
           const start = findStartControl();
           if (start && !clickedStart && !successSeen && Date.now() - waitStartedAt > 700) {
             const uploadQueue = findUploadQueueInfo();
-            if (uploadQueue?.count !== 1) {
+            const uploadCount = uploadQueue?.count ?? findUploadQueueCards().length;
+            if (uploadCount !== 1) {
               const detail = uploadQueue
                 ? `当前待处理 ${uploadQueue.count}/${uploadQueue.limit} 张`
                 : '未识别到当前待处理图片数量';
@@ -1014,6 +1020,7 @@
         if (state.stopRequested) break;
         if (!['pending', 'failed'].includes(item.status)) continue;
         while (state.paused && !state.stopRequested) await sleep(250);
+        if (state.stopRequested) break;
         state.currentId = item.id;
         const hasLaterRunnable = state.items
           .slice(index + 1)

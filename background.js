@@ -98,6 +98,13 @@ async function ensureContextMenu() {
   });
 
   chrome.contextMenus.create({
+    id: 'ethan-doubao-save-original',
+    title: 'Ethan 下载豆包原图',
+    contexts: ['image'],
+    documentUrlPatterns: ['https://*.doubao.com/*']
+  });
+
+  chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
     title: 'ID转1688链接',
     contexts: ['selection']
@@ -1065,20 +1072,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         owner.dataList = rows;
         await owner.$nextTick();
         if (todayOnly) {
-          const labels = ['操作状态', '处理结果', '资料验收', '计划完成', '完成时间', '工作积分'];
-          const columns = table.store?.states?.columns || table.columns || [];
-          const fields = labels.map(label => ({
-            label,
-            key: columns.find(column => String(column.label || '').trim() === label)?.property
-          }));
+          // The list can hide columns that are still present in the API response.
+          const fields = [
+            ['操作状态', 'opr_status'],
+            ['处理结果', 'deal_result'],
+            ['资料验收', 'data_check', true],
+            ['计划完成', 'plan_complete', true],
+            ['完成时间', 'complete_time', true],
+            ['工作积分', 'work_score']
+          ];
           const missingByRow = new WeakMap();
           for (const row of rows) {
-            const missing = fields.filter(({label, key}) => {
-              const value = key ? row[key] : undefined;
-              const text = String(value ?? '').trim();
+            const missing = fields.filter(([, field, isDate]) => {
+              const key = 'cust_service_list-' + field;
+              // An omitted field is unknown, not evidence that it was left blank.
+              if (!Object.prototype.hasOwnProperty.call(row, key)) return false;
+              const text = String(row[key] ?? '').trim();
               return !text || text === '-' || text === '--' ||
-                (['资料验收', '计划完成', '完成时间'].includes(label) && /^1970(?:\D|$)/.test(text));
-            }).map(field => field.label);
+                (isDate && /^1970(?:\D|$)/.test(text));
+            }).map(([label]) => label);
             if (missing.length) {
               missingByRow.set(row, missing);
               incompleteOrders.push({ id: String(row['cust_service_list-id'] ?? ''), missing });

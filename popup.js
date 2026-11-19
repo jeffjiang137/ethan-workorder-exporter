@@ -706,6 +706,14 @@ chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes
   });
 })();
 
+const doubaoOriginalToggle = document.getElementById('doubaoOriginalEnabled');
+chrome.storage.local.get({ doubaoOriginalEnabled: true }, settings => {
+  doubaoOriginalToggle.checked = settings.doubaoOriginalEnabled;
+});
+doubaoOriginalToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ doubaoOriginalEnabled: doubaoOriginalToggle.checked });
+});
+
 const psImageToggle=document.getElementById('psImageEnabled');
 chrome.storage.local.get({psImageEnabled:true},v=>{psImageToggle.checked=v.psImageEnabled;});
 psImageToggle.addEventListener('change',()=>chrome.storage.local.set({psImageEnabled:psImageToggle.checked}));

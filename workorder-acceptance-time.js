@@ -3,10 +3,25 @@
   if (window.__ethanAcceptanceTimeWatcher) return;
   window.__ethanAcceptanceTimeWatcher = true;
   const watched = new WeakMap();
+  const editorSessions = new WeakMap();
+  const retainedDrafts = new Map();
+  const preservingDraft = new WeakSet();
   const toolbarStyle = document.createElement('style');
   toolbarStyle.textContent = `
     .ethan-edit-dialog>.el-dialog__header{box-sizing:border-box;min-height:52px!important;padding-top:16px!important;padding-bottom:10px!important}
     .ethan-edit-dialog>.el-dialog__body{padding-top:0!important}
+    .ethan-feedback-phrases{position:absolute;left:calc(100% + 6px);bottom:16px;z-index:2;box-sizing:border-box;width:164px;padding:10px;background:#fff;border:1px solid #dce5df;border-radius:6px;box-shadow:0 4px 16px #0002;color:#303133}
+    .ethan-feedback-phrases[hidden],.ethan-edit-dialog:has([data-ethan-dialog-snapshot][aria-busy="true"]) .ethan-feedback-phrases{display:none}
+    .ethan-feedback-phrases strong{display:block;margin-bottom:6px;font-size:13px}
+    .ethan-feedback-phrases button{display:block;width:100%;padding:5px 7px;border:0;border-radius:4px;background:transparent;text-align:left;color:#08794e;cursor:pointer;font-size:12px}
+    .ethan-feedback-phrases button:is(:hover,:focus-visible){background:#e4f3eb}
+    @media(max-width:960px){.ethan-feedback-phrases{position:static;width:auto;margin:0 12px 12px}.ethan-feedback-phrases button{display:inline-block;width:auto}}
+    .ethan-edit-dialog.is-fullscreen .ethan-feedback-phrases{position:static;width:auto;margin:0 12px 12px}
+    .ethan-copy-field{position:relative}
+    .ethan-copy-field>.el-input__inner{padding-right:52px}
+    .ethan-copy-field>button[data-ethan-field-copy]{position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:2px 6px;border:0;border-radius:4px;background:transparent;color:#08794e;cursor:pointer;font-size:12px}
+    .ethan-copy-field>button[data-ethan-field-copy]:hover{background:#e4f3eb}
+    .ethan-copy-field>button[data-ethan-field-copy]:focus-visible{outline:2px solid #08794e}
     .ethan-dialog-tool{top:6px!important;width:40px!important;height:40px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#78838f!important;cursor:pointer!important;box-shadow:none!important;transition:background .15s,color .15s,box-shadow .15s!important}
     .ethan-dialog-tool:hover{background:#edf7f2!important;color:#0b995f!important}
     .ethan-dialog-tool:active{background:#dcefe5!important;box-shadow:inset 0 1px 3px #163b2420!important}
@@ -18,13 +33,24 @@
     .ethan-dialog-tool:disabled{opacity:.45;cursor:wait!important}
     .ethan-dialog-tool svg{width:18px;height:18px;pointer-events:none}
     .ethan-dialog-tool i{font-size:18px!important;line-height:1!important}
+    .ethan-ai-select{display:none!important}
+    .ethan-ai-toggle.el-input__inner{display:block;width:100%;height:28px;line-height:26px;font-size:12px;text-align:left;cursor:pointer}
+    .ethan-status-host{position:relative}
+    .ethan-status-host .el-input__inner{padding-right:101px}
+    .ethan-status-actions{position:absolute;right:26px;top:50%;transform:translateY(-50%);display:flex;gap:6px;z-index:1}
+    .ethan-status-actions button{border:0;background:transparent;color:#13a66a;font:inherit;font-size:12px;line-height:20px;padding:0 2px;cursor:pointer;white-space:nowrap}
+    .ethan-status-actions button:hover{color:#087e4e;text-decoration:underline}
+    .ethan-status-actions button:disabled{opacity:.45;cursor:not-allowed}
+    .ethan-ai-toggle[aria-pressed="true"]{background:#f0f9f4;border-color:#b7dfc7;color:#17834f}
+    .ethan-ai-toggle:focus-visible{outline:2px solid #13b874;outline-offset:2px}
+    .ethan-ai-toggle:disabled{cursor:not-allowed;opacity:.6}
     @media(prefers-reduced-motion:reduce){.ethan-dialog-tool{transition:none!important}}
   `;
   document.head.appendChild(toolbarStyle);
 
   function field(dialog, label) {
     const item = Array.from(dialog.querySelectorAll('.el-form-item')).find(node =>
-      node.querySelector('.el-form-item__label')?.textContent.replace(/[\s*：:]/g, '') === label);
+      node.querySelector('.el-form-item__label')?.textContent.replace(/[\s*：:]/g, '').replace(/帐号/g, '账号') === label);
     return item;
   }
 
@@ -33,13 +59,311 @@
       .map(node => node.__vue__).find(vm => vm?.$options.name === name);
   }
 
+  const confirmationPickers = new WeakSet();
+  const confirmationPanels = new WeakSet();
+
+  function installTimeConfirmation(dialog) {
+    for (const label of ['资料验收', '计划完成', '完成时间']) {
+      const picker = component(field(dialog, label), 'ElDatePicker');
+      if (picker?.type !== 'datetime' || confirmationPickers.has(picker)) continue;
+      confirmationPickers.add(picker);
+
+      const showPicker = picker.showPicker;
+      picker.showPicker = function (...args) {
+        showPicker.apply(this, args);
+        const panel = this.picker;
+        if (!panel || typeof panel.confirm !== 'function') return;
+        if (!confirmationPanels.has(panel)) {
+          confirmationPanels.add(panel);
+          const emit = panel.$emit;
+          const confirm = panel.confirm;
+          let confirming = false;
+          panel.confirm = function (...confirmArgs) {
+            confirming = true;
+            try {
+              return confirm.apply(this, confirmArgs);
+            } finally {
+              confirming = false;
+            }
+          };
+          panel.$emit = function (event, ...eventArgs) {
+            if (event !== 'pick' || !picker.pickerVisible) return emit.call(this, event, ...eventArgs);
+            const [date] = eventArgs;
+            if (confirming && this.isValidValue(date)) return emit.call(this, event, ...eventArgs);
+            if (!confirming && date instanceof Date && !Number.isNaN(date.getTime())) {
+              this.date = this.value = date;
+            }
+            return this;
+          };
+        }
+        // Keep the opening time local to the panel until its confirmation action.
+        panel.date = panel.value = new Date();
+        panel.userInputDate = panel.userInputTime = null;
+        panel.timePickerVisible = false;
+      };
+
+      const handleChange = picker.handleChange;
+      picker.handleChange = function (...args) {
+        if (!this.pickerVisible) return handleChange.apply(this, args);
+        if (this.userInput && confirmationPanels.has(this.picker)) {
+          const date = this.parseString(this.displayValue);
+          if (this.isValidValue(date)) this.picker.date = this.picker.value = date;
+        }
+        this.userInput = null;
+      };
+    }
+  }
+
+  function installFieldCopy(dialog) {
+    if (!field(dialog, '服务描述')) return;
+    for (const label of ['公司名称', '商家账号', '商家密码']) {
+      const item = field(dialog, label);
+      const input = item?.querySelector('input.el-input__inner, input:not([type="hidden"]), .el-input__inner');
+      if (!input || item.querySelector('[data-ethan-field-copy]')) continue;
+      const wrapper = input.parentElement;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.ethanFieldCopy = label;
+      button.setAttribute('aria-label', '复制' + label);
+      button.title = '复制' + label;
+      button.textContent = '复制';
+      wrapper.classList.add('ethan-copy-field');
+      wrapper.appendChild(button);
+    }
+  }
+
+  function installFeedbackPhrases(dialog) {
+    const input = field(dialog, '情况反馈')?.querySelector('textarea');
+    const existing = dialog.querySelector('.ethan-feedback-phrases');
+    if (existing?.feedbackInput === input) return;
+    existing?.remove();
+    if (!input) return;
+
+    const card = document.createElement('div');
+    card.className = 'ethan-feedback-phrases';
+    card.feedbackInput = input;
+    card.hidden = document.activeElement !== input;
+    const title = document.createElement('strong');
+    title.textContent = '快捷填入';
+    card.append(title);
+
+    const phrases = [
+      '发给店长', '扣首页', '海报', '扣模板', '扣主图', '扣信息', '扣图片', '数量不够已反馈',
+      '不用上传', '店长上传', '高版本', '手机端同步加积分0.2', '抠图', '不抠图'
+    ];
+    const currentMonthDay = () => {
+      const today = new Date();
+      return (today.getMonth() + 1) + '.' + today.getDate();
+    };
+    const dateButton = document.createElement('button');
+    dateButton.textContent = currentMonthDay();
+    const phraseButtons = phrases.map(phrase => {
+      const button = document.createElement('button');
+      button.textContent = phrase;
+      return button;
+    });
+    for (const button of [...phraseButtons, dateButton]) {
+      button.type = 'button';
+      button.addEventListener('click', () => {
+        if (input.disabled || input.readOnly) return;
+        if (button === dateButton) dateButton.textContent = currentMonthDay();
+        const value = input.value;
+        const separator = value && !/[\s，。；、,.!?！？;]$/.test(value) ? '，' : '';
+        const addition = separator + button.textContent;
+        if (input.maxLength >= 0 && value.length + addition.length > input.maxLength) return;
+        input.focus({ preventScroll: true });
+        input.setSelectionRange(value.length, value.length);
+        // Use the browser's editing command so Ctrl+Z can undo the insertion.
+        document.execCommand('insertText', false, addition);
+      });
+      card.append(button);
+    }
+    const hideAfterFocusLeaves = event => {
+      if (event.relatedTarget !== input && !card.contains(event.relatedTarget)) card.hidden = true;
+    };
+    input.addEventListener('focus', () => {
+      dateButton.textContent = currentMonthDay();
+      card.hidden = input.disabled || input.readOnly;
+    });
+    input.addEventListener('focusout', hideAfterFocusLeaves);
+    card.addEventListener('focusout', hideAfterFocusLeaves);
+    dialog.append(card);
+  }
+
+  function installAiProjectToggle(dialog) {
+    const item = field(dialog, 'AI项目');
+    const select = component(item, 'ElSelect');
+    if (!select || select.multiple || typeof select.handleOptionSelect !== 'function'
+        || item.querySelector('.ethan-ai-toggle')) return;
+
+    const optionFor = label => select.options.find(option => String(option.currentLabel).trim() === label);
+    if (!optionFor('是') || !optionFor('否')) return;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'el-input__inner ethan-ai-toggle';
+    const nextOption = () => optionFor(select.value === optionFor('是')?.value ? '否' : '是');
+    const isDisabled = option => select.selectDisabled || select.disabled || !option
+      || option.disabled || option.groupDisabled;
+    const sync = () => {
+      const yes = select.value === optionFor('是')?.value;
+      button.textContent = yes ? '是' : '否';
+      button.setAttribute('aria-label', 'AI项目');
+      button.setAttribute('aria-pressed', String(yes));
+      button.disabled = Boolean(isDisabled(nextOption()));
+    };
+
+    button.addEventListener('click', () => {
+      const option = nextOption();
+      if (isDisabled(option)) return;
+      // Use the original option handler so v-model and form change listeners still run.
+      select.handleOptionSelect(option);
+    });
+    select.$watch('value', sync);
+    select.$watch('selectDisabled', sync);
+    select.$watch('options', sync);
+    select.$once('hook:beforeDestroy', () => button.remove());
+    sync();
+    select.$el.classList.add('ethan-ai-select');
+    select.$el.after(button);
+  }
+
+  function installStatusShortcuts(status, setShortcut) {
+    if (typeof status.handleOptionSelect !== 'function') return () => {};
+    const host = status.$el;
+    const actions = document.createElement('div');
+    actions.className = 'ethan-status-actions';
+    const confirm = document.createElement('button');
+    const complete = document.createElement('button');
+    confirm.type = complete.type = 'button';
+    const optionFor = (...labels) => status.options.find(option =>
+      labels.includes(String(option.currentLabel).trim()));
+    const confirmOption = () => optionFor('等待客户确认', '待客户确认', '待确认');
+    const completeOption = () => optionFor('处理完成') || optionFor('已完成');
+    const isConfirm = () => confirmOption() && status.value === confirmOption().value;
+    const target = () => isConfirm() ? optionFor('等待处理') : confirmOption();
+    const disabled = option => status.disabled || status.selectDisabled || !option
+      || option.disabled || option.groupDisabled || option.value === status.value;
+
+    function choose(event, option, clear = false) {
+      event.stopPropagation();
+      if (disabled(option)) return;
+      setShortcut({ value: option.value, clear });
+      try { status.handleOptionSelect(option); }
+      finally { setShortcut(null); }
+    }
+
+    confirm.addEventListener('click', event => choose(event, target(), Boolean(isConfirm())));
+    complete.addEventListener('click', event => choose(event, completeOption()));
+    complete.textContent = '完成';
+    const sync = () => {
+      const label = isConfirm() ? '待处理' : '待确认';
+      if (confirm.textContent !== label) confirm.textContent = label;
+      confirm.disabled = Boolean(disabled(target()));
+      complete.disabled = Boolean(disabled(completeOption()));
+    };
+    actions.append(confirm, complete);
+    host.classList.add('ethan-status-host');
+    host.append(actions);
+    sync();
+    const stops = ['value', 'options', 'selectDisabled'].map(key => status.$watch(key, sync));
+    return () => {
+      stops.forEach(stop => stop());
+      actions.remove();
+      host.classList.remove('ethan-status-host');
+    };
+  }
+
+  function trackEditorDraft(dialog) {
+    const form = dialog.querySelector('.el-form')?.__vue__;
+    const model = form?.model;
+    const id = model?.id ?? model?.['cust_service_list-id'];
+    if (id == null) return;
+    const existing = editorSessions.get(dialog);
+    if (existing?.model === model && existing.id === id) return;
+
+    const savedDraft = retainedDrafts.get(id);
+    const original = structuredClone(model);
+    if (savedDraft) {
+      for (const [key, value] of Object.entries(savedDraft.changes)) {
+        if (savedDraft.model === model) original[key] = savedDraft.original[key];
+        form.$set(model, key, structuredClone(value));
+      }
+    }
+    const session = { id, model, original };
+    editorSessions.set(dialog, session);
+
+    const wrapper = dialog.closest('.el-dialog__wrapper');
+    if (!wrapper || wrapper.dataset.ethanDraftEvents) return;
+    wrapper.dataset.ethanDraftEvents = 'true';
+    wrapper.addEventListener('click', event => {
+      const currentDialog = wrapper.querySelector('.el-dialog');
+      const active = editorSessions.get(currentDialog);
+      const currentForm = currentDialog?.querySelector('.el-form')?.__vue__;
+      if (!active || currentForm?.model !== active.model) return;
+      const { id, model, original } = active;
+
+      const button = event.target.closest?.('button');
+      if (button?.classList.contains('ethan-dialog-close')) {
+        if (preservingDraft.has(currentDialog)) return;
+        retainedDrafts.delete(id);
+        for (const [key, value] of Object.entries(original)) {
+          if (JSON.stringify(model[key]) !== JSON.stringify(value)) {
+            currentForm.$set(model, key, structuredClone(value));
+          }
+        }
+      } else if (button?.textContent.includes('确认提交')) {
+        retainedDrafts.delete(id);
+      }
+    }, true);
+  }
+
+  document.addEventListener('click', event => {
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest(
+      '.el-dialog, .el-select-dropdown, .el-picker-panel, .el-cascader__dropdown, .el-popover, .el-message-box__wrapper'
+    )) return;
+
+    const visibleDialogs = [...document.querySelectorAll('.el-dialog')]
+      .filter(dialog => dialog.getClientRects().length);
+    const dialog = visibleDialogs.at(-1);
+    const session = editorSessions.get(dialog);
+    const close = dialog?.querySelector('.ethan-dialog-close');
+    if (!session || !close || close.disabled) return;
+
+    const { id, model, original } = session;
+    const changes = Object.fromEntries(Object.entries(model).filter(([key, value]) =>
+      JSON.stringify(value) !== JSON.stringify(original[key])));
+    if (Object.keys(changes).length) {
+      retainedDrafts.set(id, { model, original, changes: structuredClone(changes) });
+    } else {
+      retainedDrafts.delete(id);
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    // Use the same native close path as the header button, but skip cancellation.
+    preservingDraft.add(dialog);
+    try { close.click(); }
+    finally { preservingDraft.delete(dialog); }
+  }, true);
+
   function scan() {
     document.querySelectorAll('.el-dialog').forEach(dialog => {
-      if (!dialog.getClientRects().length || dialog.querySelector('.el-dialog__title')?.textContent.trim() !== '编辑') return;
+      if (!dialog.getClientRects().length) {
+        editorSessions.delete(dialog);
+        return;
+      }
+      if (dialog.querySelector('.el-dialog__title')?.textContent.trim() !== '编辑') return;
       dialog.classList.add('ethan-edit-dialog');
+      installFieldCopy(dialog);
+      installFeedbackPhrases(dialog);
+      installTimeConfirmation(dialog);
+      installAiProjectToggle(dialog);
       const header = dialog.querySelector('.el-dialog__header');
       const closeIcon = header?.querySelector('.el-dialog__close, .el-icon-close');
       const closeButton = closeIcon?.closest('button, .el-dialog__headerbtn');
+      trackEditorDraft(dialog);
       if (closeButton && !closeButton.dataset.ethanLargerClose) {
         closeButton.dataset.ethanLargerClose = 'true';
         closeButton.style.cssText += ';position:absolute;top:4px;right:8px;width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;';
@@ -114,22 +438,19 @@
       if (!status || watched.has(status)) return;
       let previousValue = status.value;
       let pending = null;
+      let shortcut = null;
       const form = dialog.querySelector('.el-form')?.__vue__;
       const writeTime = () => {
-        if (!pending || !dialog.getClientRects().length || status.value !== pending.status
+        if (!pending || pending.written || !dialog.getClientRects().length || status.value !== pending.status
             || form?.model?.id !== pending.id) return;
         const item = field(dialog, pending.label);
         const picker = component(item, 'ElDatePicker') || component(item, 'ElInput');
         const input = picker?.$el.querySelector('input');
         if (!picker || picker.disabled || picker.readonly || picker.pickerDisabled
-            || !input || input.disabled || input.readOnly) return;
+            || !input || input.disabled || (picker.$options.name === 'ElInput' && input.readOnly)) return;
         const key = pending.label === '资料验收' ? 'cust_service_list-data_check' : 'cust_service_list-complete_time';
         // CustomEdit submits changes from ElForm.model, not the displayed input.
         if (form?.model && Object.prototype.hasOwnProperty.call(form.model, key)) {
-          const current = form.model[key];
-          // Preserve a subsequent manual edit of the timestamp.
-          if (pending.written && current !== pending.original && current !== pending.text
-              && current && !String(current).startsWith('1970-')) return;
           form.$set(form.model, key, pending.text);
         }
         const timeValue = picker.$options.name === 'ElInput' || picker.valueFormat ? pending.text : pending.now;
@@ -142,28 +463,34 @@
         previousValue = value;
         pending = null;
         if (!dialog.getClientRects().length) return;
+        const label = String(status.options.find(option => option.value === value)?.currentLabel ?? value).trim();
         const acceptance = previous === '等待处理' && value === '处理中';
-        const completion = ['待确认', '待客户确认', '等待客户确认', '已完成', '处理完成', '等待助理发布'].includes(value);
-        if (!acceptance && !completion) return;
+        // General status changes can also fire while the editor loads a record.
+        const fromShortcut = shortcut !== null && shortcut.value === value;
+        const completion = fromShortcut && !shortcut.clear;
+        const clear = fromShortcut && shortcut.clear && label === '等待处理';
+        if (!acceptance && !completion && !clear) return;
         const now = new Date();
         const pad = value => String(value).padStart(2, '0');
         const text = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        const key = acceptance ? 'cust_service_list-data_check' : 'cust_service_list-complete_time';
         pending = { status: value, label: acceptance ? '资料验收' : '完成时间',
-          id: form?.model?.id, now, text, original: form?.model?.[key], written: false };
+          id: form?.model?.id, now: clear ? null : now, text: clear ? '' : text, written: false };
         status.$nextTick(writeTime);
       };
       const beforeSubmit = event => {
         const button = event.target.closest?.('button');
-        if (button?.textContent.includes('确认提交')) writeTime();
+        if (button?.classList.contains('ethan-dialog-close')) pending = null;
+        else if (button?.textContent.includes('确认提交')) writeTime();
       };
       dialog.addEventListener('click', beforeSubmit, true);
       const stop = status.$watch('value', value => { previousValue = value; });
       status.$on('change', fillTime);
+      const stopShortcuts = installStatusShortcuts(status, intent => { shortcut = intent; });
       watched.set(status, stop);
       status.$once('hook:beforeDestroy', () => {
         pending = null;
         stop();
+        stopShortcuts();
         status.$off('change', fillTime);
         dialog.removeEventListener('click', beforeSubmit, true);
       });

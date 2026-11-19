@@ -213,10 +213,45 @@ button[hidden]{display:none!important}
 .prompt-transfer select option{background:#fff;color:#45648d;font-weight:400}
 .prompt-transfer button{min-height:32px;border-radius:8px}
 
-.utility-section .utility-switches{gap:5px;min-height:34px;align-items:center}
-.utility-section #manageWordDictionary{font-size:11px;padding:0 2px;gap:4px;color:#405773}
-.utility-section .utility-switches .utility-toggle{font-size:11px;line-height:1.4;gap:4px;white-space:nowrap;color:#405773}
-.utility-section .utility-switches input[type="checkbox"]{flex-shrink:0}
+.utility-section .utility-switches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.utility-section #manageWordDictionary,
+.utility-section .utility-switches .utility-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  min-height: 32px;
+  width: 100%;
+  padding: 0 10px;
+  gap: 6px;
+  border: 1px solid #dce5f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #405773;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.utility-section #manageWordDictionary {
+  justify-content: flex-start;
+  font-weight: 600;
+}
+.utility-section .utility-switches .utility-toggle:last-child {
+  justify-content: space-between;
+}
+.utility-section .utility-toggle span { order: -1; }
+.utility-section #manageWordDictionary:hover,
+.utility-section .utility-toggle:hover {
+  border-color: #b4cdf2;
+  background: #f6f9ff;
+}
+.utility-section #manageWordDictionary:focus-visible {
+  outline: 2px solid #93b8ff;
+  outline-offset: 2px;
+}
 </style>
 </head>
 <body>
@@ -279,6 +314,9 @@ button[hidden]{display:none!important}
   <div class="utility-switches"><button id="manageWordDictionary" type="button" title="打开极限词库管理"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h6c1.2 0 2.3.5 3 1.3C12.7 3.5 13.8 3 15 3h6v17h-6c-1.2 0-2.3.5-3 1.3-.7-.8-1.8-1.3-3-1.3H3V3zm8 3.5C10.5 6.2 9.8 6 9 6H6v2h3c.8 0 1.5.2 2 .5v-2zm2 2c.5-.3 1.2-.5 2-.5h3V6h-3c-.8 0-1.5.2-2 .5v2z"/></svg>极限词库</button>
     <label class="utility-toggle" title="悬停网页图片时显示 PS 按钮，点击置入 Photoshop">
       <input id="psImageEnabled" type="checkbox"><span>图片置入PS</span>
+    </label>
+    <label class="utility-toggle" title="豆包图片置入 PS、下载原图和预览保存时使用无水印原图">
+      <input id="doubaoOriginalEnabled" type="checkbox"><span>豆包无水印</span>
     </label>
     <label class="utility-toggle" title="商品内容稳定加载后自动关闭1688可选弹窗，登录与纯验证页面不自动操作">
       <input id="autoClose1688Popups" type="checkbox"><span>1688弹窗关闭</span>

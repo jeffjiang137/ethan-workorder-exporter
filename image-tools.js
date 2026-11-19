@@ -5,9 +5,9 @@
   cutoutPreview.innerHTML='<div><div class="cutout-caption">原图</div><img data-cutout-original alt="原图"></div><div><div class="cutout-caption" data-cutout-title>抠图中…</div><div class="cutout-result"><img data-cutout-result alt="抠图结果"><span class="cutout-spinner" aria-label="正在抠图"></span></div></div>';
   zone.after(cutoutPreview);
   function renderCutoutPreview(){
-    const visible=mode==='cutout'&&!!cutoutState?.original;
+    const visible=mode==='cutout'&&provider==='local'&&!!cutoutState?.original;
     cutoutPreview.hidden=!visible;
-    if(mode==='cutout')zone.hidden=visible;
+    if(mode==='cutout'&&provider==='local')zone.hidden=visible;
     if(!visible)return;
     cutoutPreview.querySelector('[data-cutout-original]').src=cutoutState.original;
     const result=cutoutPreview.querySelector('[data-cutout-result]');result.src=cutoutState.result||cutoutState.original;
@@ -121,6 +121,7 @@
           status.textContent='已传入抠抠图，逐张处理及下载进度请在嵌入页面查看；处理时请保持插件面板打开。';return;
         }
 
+        releaseCutoutPreviewUrl();
         cutoutState={original:URL.createObjectURL(files[0].file),running:true};renderCutoutPreview();
         await modeReady;
         const qualityMode=cutoutMode.value==='high'?'high':'fast';
@@ -131,7 +132,8 @@
         const result=await chrome.runtime.sendMessage({type:'ETHAN_START_CUTOUT',jobId,mode:qualityMode});
         if(!result?.ok)throw Error(result?.message||'后台任务启动失败');
         const current=await chrome.storage.local.get('cutoutProgress');
-        status.textContent=current.cutoutProgress?.message||'后台抠图已启动，可以关闭面板；重新打开可查看进度。';
+        if(current.cutoutProgress)showCutoutProgress(current.cutoutProgress);
+        else status.textContent='后台抠图已启动，可以关闭面板；重新打开可查看进度。';
         return;
       }
       if(!exporting){
@@ -157,7 +159,26 @@
       }finally{images.forEach(image=>image.close());}
     }catch(error){if(mode==='cutout'&&cutoutState){cutoutState.running=false;cutoutState.outcome='failed';}status.textContent=error.message||'处理失败，请重试';}finally{busy=false;window.dispatchEvent(new CustomEvent('ethan-tool-busy',{detail:{mode,running:false}}));picker.value='';renderQueue();renderCutoutPreview();syncEmbedded();}
   }
-  function showCutoutProgress(progress){if(!progress)return;if(progress.originalPreview)cutoutState={original:progress.originalPreview,result:progress.resultPreview,running:progress.running,outcome:progress.outcome||(progress.running?'running':progress.done>0&&!progress.failed?'success':'failed')};else if(cutoutState){cutoutState.running=progress.running;cutoutState.outcome=progress.outcome||(progress.running?'running':progress.done>0&&!progress.failed?'success':'failed');}if(mode==='cutout')status.textContent=progress.message;renderCutoutPreview();}
+  function releaseCutoutPreviewUrl(){
+    if(cutoutState?.original?.startsWith('blob:'))URL.revokeObjectURL(cutoutState.original);
+  }
+  function showCutoutProgress(progress){
+    if(!progress)return;
+    const outcome=progress.outcome||(progress.running?'running':progress.done>0&&!progress.failed?'success':'failed');
+    if(!progress.running&&outcome==='success'){
+      releaseCutoutPreviewUrl();
+      cutoutState=null;
+      cutoutPreview.querySelectorAll('img').forEach(image=>image.removeAttribute('src'));
+    }else if(progress.originalPreview){
+      releaseCutoutPreviewUrl();
+      cutoutState={original:progress.originalPreview,result:progress.resultPreview,running:progress.running,outcome};
+    }else if(cutoutState){
+      cutoutState.running=progress.running;
+      cutoutState.outcome=outcome;
+    }
+    if(mode==='cutout'&&provider==='local')status.textContent=outcome==='success'?'':progress.message;
+    renderCutoutPreview();
+  }
   chrome.storage.local.get('cutoutProgress').then(s=>showCutoutProgress(s.cutoutProgress));
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.cutoutProgress)showCutoutProgress(changes.cutoutProgress.newValue);});
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.ethanKktProgress&&mode==='cutout'&&provider==='koukoutu')status.textContent=changes.ethanKktProgress.newValue?.message||'';});

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$ImagePath, [switch]$OpenImage)
+﻿param([Parameter(Mandatory=$true)][string]$ImagePath, [switch]$OpenImage)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {

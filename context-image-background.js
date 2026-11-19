@@ -1,3 +1,71 @@
+function ethanDoubaoPngFilename(pageTitle) {
+  let name = String(pageTitle || '').replace(/\s*[-–—|｜]\s*豆包\s*$/u, '')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 100).replace(/[. ]+$/, '');
+  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = '_' + name;
+  if (!name || /^(豆包|下载)$/.test(name)) name = '豆包原图';
+  return name + '.png';
+}
+
+async function ethanDownloadDoubaoImage(value, candidates, pageTitle) {
+  const url = new URL(value);
+  const allowed = input => {
+    try {
+      const candidate = new URL(input);
+      return candidate.protocol === 'https:' &&
+        /(^|\.)(doubao\.com|byteimg\.com|byteimg\.cn|ibytedtos\.com|volces\.com|volccdn\.com)$/i.test(candidate.hostname) &&
+        !/watermark|[-_]lwm\d*(?:[._-]|$)/i.test(candidate.pathname);
+    } catch { return false; }
+  };
+  const sources = [...new Set([url.href, ...(Array.isArray(candidates) ? candidates.slice(0, 3) : [])])].filter(allowed);
+  if (!sources.length) throw new Error('豆包原图地址无效');
+  const bytes = await fetchDoubaoPhotoshopBytes(sources, { png: true });
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+  }
+  const filename = ethanDoubaoPngFilename(pageTitle);
+  const downloadUrl = `data:image/png;request=${crypto.randomUUID()};base64,${btoa(binary)}`;
+  // Filename determination also runs for data URLs.
+  linkedDownloadPaths.set(downloadUrl, filename);
+  try {
+    return await chrome.downloads.download({ url: downloadUrl, filename, conflictAction: 'uniquify' });
+  } finally {
+    setTimeout(() => linkedDownloadPaths.delete(downloadUrl), 30000);
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.type !== 'ethan-doubao-save-original' || !sender.tab ||
+      !/^https:\/\/(?:[\w-]+\.)*doubao\.com\//i.test(sender.url || '')) return;
+  chrome.storage.local.get({ doubaoOriginalEnabled: true }).then(settings => {
+    if (!settings.doubaoOriginalEnabled) throw new Error('豆包无水印开关已关闭');
+    return ethanDownloadDoubaoImage(message.url, message.candidates, sender.tab.title);
+  }).then(
+    () => respond({ ok: true }),
+    error => respond({ ok: false, error: error.message })
+  );
+  return true;
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== 'ethan-doubao-save-original' || !tab?.id) return;
+  void (async () => {
+    try {
+      const { doubaoOriginalEnabled } = await chrome.storage.local.get({ doubaoOriginalEnabled: true });
+      if (!doubaoOriginalEnabled) throw new Error('请先开启豆包无水印开关');
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id, frameIds: [info.frameId || 0] },
+        func: value => globalThis.ethanDoubaoContextOriginal?.(value),
+        args: [info.srcUrl || '']
+      });
+      if (!result?.url) throw new Error(result?.error || '请刷新豆包页面后重试');
+      await ethanDownloadDoubaoImage(result.url, result.candidates, tab.title);
+    } catch (error) {
+      await chrome.notifications.create({ type: 'basic', iconUrl: 'icons/icon128.png', title: '豆包图片下载失败', message: error.message });
+    }
+  })();
+});
+
 // Reuse the collector's Billfish discovery, source detection and download fallback.
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== 'ethan-save-image') return;

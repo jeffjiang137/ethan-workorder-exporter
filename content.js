@@ -498,6 +498,16 @@ function ethanChineseError(value) {
     return findFilterByLabel('操作人员');
   }
 
+  function prepareOperatorFilter(event) {
+    const root = event.target.closest?.('.el-select');
+    if (root && findOperationPersonFilter()?.valueRoot === root) {
+      root.dispatchEvent(new Event('ethan-prioritize-design-operators', { bubbles: true }));
+    }
+  }
+
+  document.addEventListener('focusin', prepareOperatorFilter, true);
+  document.addEventListener('click', prepareOperatorFilter, true);
+
   const FILTER_JOIN_WORDS = new Set(['并且', '或者']);
   const FILTER_COMPARE_WORDS = new Set(['等于', '不等于', '包含', '不包含', '大于', '大于等于', '小于', '小于等于']);
   const EMPTY_SELECT_PLACEHOLDERS = new Set(['', '请选择', '选择或输入', '请输入', '全部', '不限']);
@@ -3044,6 +3054,23 @@ function ethanChineseError(value) {
       button.disabled = false;
       button.removeAttribute('aria-busy');
       button.title = '快照并复制弹窗';
+    }
+  });
+  document.addEventListener('click', async event => {
+    const button = event.target.closest?.('.ethan-edit-dialog button[data-ethan-field-copy]');
+    if (!button) return;
+    const label = button.dataset.ethanFieldCopy;
+    const input = button.parentElement.querySelector(':scope > input:not([type="hidden"]), :scope > .el-input__inner');
+    const value = input?.value ?? input?.textContent;
+    if (!value) {
+      showSnapshotToast(label + '为空');
+      return;
+    }
+    try {
+      await copyPlainText(value);
+      showSnapshotToast(label + '已复制');
+    } catch {
+      showSnapshotToast(label + '复制失败，请重试');
     }
   });
   startWorkOrderColumnLayout();

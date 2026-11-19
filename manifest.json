@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ethan 工单助手",
-  "version": "1.0.53",
+  "version": "1.0.54",
   "description": "Ethan 工单管理与素材助手：提示词模板管理、图片工具及工单统计。",
   "permissions": [
     "clipboardWrite",
@@ -42,6 +42,19 @@
     }
   },
   "content_scripts": [
+    {
+      "matches": ["https://*.doubao.com/*"],
+      "js": ["doubao-original.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://*.doubao.com/*"],
+      "js": ["doubao-original-capture.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
     {
       "matches": [
         "https://ethan.hzzichi.com/*"

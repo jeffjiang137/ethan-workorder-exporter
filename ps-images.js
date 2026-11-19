@@ -31,7 +31,9 @@
         button.disabled = true; button.textContent = '…';
         notify('正在读取图片并连接 Photoshop…');
         try {
-            const url = resource(img);
+            const original = globalThis.ethanDoubaoOriginal?.(img.currentSrc || img.src);
+            if (original?.error) throw new Error(original.error);
+            const url = original?.url || resource(img);
             let dataUrl;
             if (/^(blob:|data:)/.test(url)) {
                 const blob = await (await fetch(url)).blob();
@@ -39,7 +41,7 @@
                 dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
             }
             const request = (confirmOpen = false) => Promise.race([
-                chrome.runtime.sendMessage({ source: 'codex-ps-image', url, dataUrl, confirmOpen }),
+                chrome.runtime.sendMessage({ source: 'codex-ps-image', url, dataUrl, doubaoCandidates: original?.candidates, confirmOpen }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('图片处理超时，请检查 PS 图层和本地服务连接后重试')), 135000))
             ]);
             let result = await request();
