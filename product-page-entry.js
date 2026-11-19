@@ -27,7 +27,10 @@ function ethanChineseError(value) {
     const button = document.createElement('button');
     button.textContent = shop ? '获取全店链接' : '商品图片下载';
     button.style.cssText = 'border:1px solid #93b4ef;border-radius:5px;padding:6px 12px;color:#2563eb;background:#eff6ff;cursor:pointer';
-    button.onclick = async () => {
+    button.type = 'button';
+    button.onclick = async event => {
+      event.preventDefault();
+      event.stopPropagation();
       button.disabled = true;
       if (shop) button.textContent='正在获取…';
       try {
@@ -48,7 +51,60 @@ function ethanChineseError(value) {
       row.style.height='22px';
       target.prepend(row);
     } else {
-      target.before(row);
+      const shortcuts = [];
+      let activeRequest = '', activeButton = null;
+      chrome.runtime.onMessage.addListener(message => {
+        if(message.type !== 'ETHAN_PAGE_PACKAGE_PROGRESS' || message.requestId !== activeRequest || !activeButton) return;
+        if(message.stage === 'pack') activeButton.textContent = '下载 ' + (message.processedFiles || 0) + '/' + (message.totalFiles || 0);
+        if(message.stage === 'zip') activeButton.textContent = '正在打包…';
+        if(message.stage === 'done') activeButton.textContent = '已提交下载';
+      });
+      for (const [kind, label] of [['main','主图'],['detail','详情图'],['stitch','长图'],['sku','SKU图'],['all','全部']]) {
+        const quick = document.createElement('button');
+        quick.type = 'button';
+        quick.textContent = label;
+        quick.title = kind === 'stitch' ? '直接下载拼接长图图片' : '下载' + label + '压缩包';
+        quick.style.cssText = button.style.cssText;
+        quick.style.marginRight = '6px';
+        quick.onclick = async event => {
+          event.preventDefault();
+          event.stopPropagation();
+          shortcuts.forEach(control => control.disabled = true);
+          activeRequest = Date.now() + '_' + Math.random().toString(36).slice(2);
+          activeButton = quick;
+          quick.textContent = '正在采集…';
+          try {
+            const result = await chrome.runtime.sendMessage({ type:'ETHAN_PAGE_QUICK_PACKAGE', kind, requestId:activeRequest });
+            if (!result?.ok) throw new Error(result?.message || result?.error || '下载失败');
+            quick.textContent = result.failedCount ? '完成，失败' + result.failedCount + '张' : '已提交下载';
+            setTimeout(() => { if (quick.isConnected && !quick.disabled) quick.textContent = label; }, 4000);
+          } catch (error) {
+            quick.textContent = label;
+            quick.title = ethanChineseError(error.message);
+            alert(quick.title);
+          } finally { activeRequest = ''; activeButton = null; shortcuts.forEach(control => control.disabled = false); }
+        };
+        shortcuts.push(quick);
+        row.insertBefore(quick, button);
+      }
+      // Keep the toolbar INSIDE the gallery. Adding a full-width sibling to
+      // a horizontal flex container can push the entire product off-screen.
+      const card = target;
+      const computed = getComputedStyle(card);
+      const originalPadding = parseFloat(computed.paddingTop) || 0;
+      if (computed.position === 'static') card.style.position = 'relative';
+      row.style.cssText = 'position:absolute;top:0;left:0;z-index:10;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:6px;box-sizing:border-box;width:100%;padding:8px 12px;margin:0;pointer-events:auto';
+      shortcuts.forEach(control => control.style.marginRight = '0');
+      card.prepend(row);
+      const reserveSpace = () => {
+        const padding = originalPadding + row.getBoundingClientRect().height;
+        const value = padding + 'px';
+        if (card.style.paddingTop !== value) card.style.paddingTop = value;
+      };
+      reserveSpace();
+      new ResizeObserver(reserveSpace).observe(row);
+
+
     }
   }
   install();

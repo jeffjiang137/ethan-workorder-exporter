@@ -15,16 +15,39 @@
     ['信息修改-客户', .03], ['信息修改-客自', .03], ['权限词', .04], ['简易发布（极限词）', .04], ['简易发布(极限词)', .04],
     ['新商首页', 4], ['新商模板', 1.5], ['新商主图', .1], ['新商信息', .35], ['其他项目', .1]
   ]);
+  const pendingStyle = document.createElement('style');
+  pendingStyle.textContent = '.ethan-unaccepted-plan,.ethan-unaccepted-plan .cell,.ethan-unaccepted-plan .cell *{color:#e68a00!important}';
+  document.head.appendChild(pendingStyle);
+  function highlightUnacceptedPlans(root) {
+    // Match the existing pending-acceptance grouping: the unset 1970 plan date.
+    const columns = root.__vue__?.store?.states?.columns || [];
+    const planColumn = columns.find(column => column.property === 'cust_service_list-plan_complete' || column.label === '计划完成');
+    const headers = [...root.querySelectorAll('.el-table__header-wrapper th')];
+    const planIndex = headers.findIndex(cell => cell.textContent.trim() === '计划完成');
+    root.querySelectorAll('.el-table__body-wrapper tbody tr,.el-table__fixed-body-wrapper tbody tr').forEach(row => {
+      const cells = [...row.children];
+      const cell = (planColumn?.id && cells.find(node => node.classList.contains(planColumn.id))) || cells[planIndex];
+      if (!cell) return;
+      const pending = /^1970-01-01(?:\s|$)/.test(cell.textContent.trim());
+      if (cell.classList.contains('ethan-unaccepted-plan') !== pending) cell.classList.toggle('ethan-unaccepted-plan', pending);
+    });
+  }
   let panel;
   let last = '';
   function render() {
     const sidebar = document.querySelector('.site-sidebar');
-    const root = Array.from(document.querySelectorAll('.el-table')).find(el =>
-      el.getClientRects().length && el.querySelector('thead')?.textContent.includes('工单ID'));
+    const root = Array.from(document.querySelectorAll('.el-table')).find(el => {
+      if (!el.getClientRects().length) return false;
+      const headers = el.querySelector('thead')?.textContent || '';
+      // Customer detail embeds a separate service-order table. Only the main
+      // workorder list includes company and planned-completion columns.
+      return headers.includes('工单ID') && headers.includes('公司名称') && headers.includes('计划完成');
+    });
+    if (root) highlightUnacceptedPlans(root);
     const table = root?.__vue__;
-    const combined = table?.__ethanCombinedSort;
-    if (!sidebar || !table || !Array.isArray(table.data) || !combined || table.data !== combined.rows) { panel?.remove(); panel = null; last = ''; return; }
+    if (!sidebar || !table || !Array.isArray(table.data)) { panel?.remove(); panel = null; last = ''; return; }
     if (!panel?.isConnected) {
+      last = '';
       panel = document.createElement('section');
       panel.style.cssText = 'margin:14px 12px;padding:12px;border:1px solid #52646c;border-radius:6px;color:#e5edef;font:12px/1.8 sans-serif;background:#263238;max-height:300px;overflow:auto';
       (sidebar.querySelector('.site-sidebar__inner') || sidebar).appendChild(panel);
@@ -35,11 +58,12 @@
     const seen = new Set();
     for (const row of table.data) {
       const id = row['cust_service_list-id'];
-      if (seen.has(id)) continue;
-      seen.add(id);
+      if (id != null && seen.has(id)) continue;
+      if (id != null) seen.add(id);
       const date = String(row['cust_service_list-plan_complete'] || '').slice(0, 10);
-      const day = /^\d{4}-\d{2}-\d{2}$/.test(date) && !date.startsWith('1970-') ? date : '未设计划时间';
-      const quantity = Number(String(row['cust_service_list-cs_order_quantity'] || '').replace(/[^\d.+-]/g, ''));
+      const day = date.startsWith('1970') ? '待验收工单'
+        : /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '未填计划时间（空值或无效）';
+      const quantity = Number(String(row['cust_service_list-cs_order_quantity'] || '').replace(/[+＋]/g, '').replace(/[^\d.-]/g, ''));
       if (!Number.isFinite(quantity) || quantity <= 0) { unknown.add(`工单${id}数量无效`); continue; }
       const services = new Set(['design', 'offer', 'optimize', 'other'].map(field =>
         String(row[`cust_service_list-service_content_${field}`] || '').replace(/\s+/g, '').replace(/／/g, '/')).filter(value => value && value !== '-'));
@@ -57,7 +81,7 @@
     last = signature;
     panel.replaceChildren();
     const title = document.createElement('strong');
-    title.textContent = '每日预计积分';
+    title.textContent = '按计划完成时间预计积分';
     panel.appendChild(title);
     const text = document.createElement('div');
     text.textContent = `按当前列表 ${summary.count} 条工单计算`;

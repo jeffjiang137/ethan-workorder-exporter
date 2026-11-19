@@ -20,6 +20,9 @@
   function isProtectedAuthUrl(value) {
     const url = parseEarlyUrl(value);
     if (!url) return false;
+    // Seller publishing/editing dialogs must remain under the user's control.
+    // Origin-level protection also covers embedded frames in the editor.
+    if (/^offer-new\.1688\.com$/i.test(url.hostname)) return true;
     if (AUTH_HOST_RE.test(url.hostname)) return true;
     if (!/(^|\.)(1688\.com|taobao\.com|alibaba\.com)$/i.test(url.hostname)) return false;
     return AUTH_PATH_RE.test(url.pathname);

@@ -2110,7 +2110,13 @@ function ethanChineseError(value) {
       return prepared || { ok: false };
     }
     hideModal();
-    return extractStatsAndCopy({ completedQuantity: true });
+    const result = await extractStatsAndCopy({ completedQuantity: true });
+    if (prepared.incompleteOrders?.length) {
+      window.alert('发现 ' + prepared.incompleteOrders.length + ' 条工单存在未填项，已在当前列表标红：\n\n' +
+        prepared.incompleteOrders.map(item => '工单 ' + item.id + '：' + item.missing.join('、')).join('\n') +
+        '\n\n1970 年的时间视为未填写。');
+    }
+    return result;
   }
 
   // 页面内快捷按钮：固定定位到“常用快捷查询”左侧。
@@ -2965,6 +2971,81 @@ function ethanChineseError(value) {
     } catch (error) { console.warn('Ethan 每页50条设置失败', error); }
   }, 500);
   ensureUI();
+  function showSnapshotToast(message) {
+    document.getElementById('ethan-snapshot-toast')?.remove();
+    const toast = document.createElement('div');
+    toast.id = 'ethan-snapshot-toast';
+    toast.setAttribute('role', 'status');
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:2147483647;pointer-events:none;background:rgba(38,50,56,.92);color:#fff;padding:10px 18px;border-radius:6px;font:13px/1.6 sans-serif;max-width:80vw;box-shadow:0 3px 12px #0002';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+  }
+  document.addEventListener('click', async event => {
+    const button = event.target.closest?.('[data-ethan-dialog-snapshot]');
+    if (!button || button.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dialog = button.closest('.el-dialog');
+    if (!dialog) return;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.title = '正在截取并复制…';
+    const snapshotStyles = [];
+    const expandForSnapshot = (node, css) => {
+      snapshotStyles.push([node, node.getAttribute('style'), node.scrollTop]);
+      node.style.cssText += css;
+    };
+    const restoreSnapshotLayout = () => {
+      for (const [node, style, scrollTop] of snapshotStyles.splice(0).reverse()) {
+        if (style === null) node.removeAttribute('style'); else node.setAttribute('style', style);
+        node.scrollTop = scrollTop;
+      }
+    };
+    try {
+      // Fit the entire expanded dialog into a single browser capture, including
+      // content previously clipped by the dialog body's own scroll container.
+      const originalWidth = dialog.getBoundingClientRect().width;
+      const body = dialog.querySelector('.el-dialog__body');
+      if (body) expandForSnapshot(body, ';max-height:none!important;height:auto!important;overflow:visible!important;');
+      expandForSnapshot(dialog, ';position:fixed!important;top:0!important;left:0!important;margin:0!important;width:' + originalWidth + 'px!important;height:auto!important;max-height:none!important;overflow:visible!important;transform:none!important;transition:none!important;');
+      const fullHeight = Math.max(dialog.scrollHeight, dialog.getBoundingClientRect().height);
+      const scale = Math.min(1, (window.innerWidth - 4) / originalWidth, (window.innerHeight - 4) / fullHeight);
+      dialog.style.setProperty('transform-origin', 'top left', 'important');
+      dialog.style.setProperty('transform', 'scale(' + scale + ')', 'important');
+      dialog.style.setProperty('left', ((window.innerWidth - originalWidth * scale) / 2) + 'px', 'important');
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rect = dialog.getBoundingClientRect();
+      const viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
+      const response = await chrome.runtime.sendMessage({type: 'ETHAN_DIALOG_SNAPSHOT'});
+      restoreSnapshotLayout();
+      if (!response?.ok) throw new Error(response?.message || '截图失败');
+      const image = new Image();
+      image.src = response.dataUrl;
+      await image.decode();
+      const sx = image.naturalWidth / viewportWidth, sy = image.naturalHeight / viewportHeight;
+      const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+      const width = Math.min(viewportWidth, rect.right) - left;
+      const height = Math.min(viewportHeight, rect.bottom) - top;
+      if (width <= 0 || height <= 0) throw new Error('弹窗不在可见区域');
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * sx);
+      canvas.height = Math.round(height * sy);
+      canvas.getContext('2d').drawImage(image, left * sx, top * sy, width * sx, height * sy, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('截图转换失败');
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      button.title = '弹窗快照已复制';
+      showSnapshotToast('完整弹窗快照已复制，可直接粘贴。');
+    } catch (error) {
+      showSnapshotToast('快照复制失败：' + error.message);
+    } finally {
+      restoreSnapshotLayout();
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.title = '快照并复制弹窗';
+    }
+  });
   startWorkOrderColumnLayout();
   startAutoOpenWorkOrderPage();
   startAutoApplyDefaultFilters();

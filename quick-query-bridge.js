@@ -9,15 +9,6 @@
       let owner = element.__vue__;
       while (owner && !Array.isArray(owner.userMenuList)) owner = owner.$parent;
       if (!control || !owner) continue;
-      if (!owner.__ethanDefaultPlanSort && typeof owner.searchData === 'function') {
-        const search = owner.searchData;
-        owner.searchData = function (...args) {
-          this.dataForm.orderBy = 'cust_service_list-plan_complete';
-          this.dataForm.order = 'asc';
-          return search.apply(this, args);
-        };
-        owner.__ethanDefaultPlanSort = true;
-      }
       const data = JSON.stringify(owner.userMenuList.map((item, index) => ({
         id: String(item.menu_id ?? index), label: item.menu_title, index
       })));

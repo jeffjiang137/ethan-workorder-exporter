@@ -1,3 +1,8 @@
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message.type !== 'ETHAN_PAGE_PACKAGE_PROGRESS' || sender.tab || sender.id !== chrome.runtime.id) return false;
+  void chrome.tabs.sendMessage(message.tabId, message).catch(()=>{});
+  return false;
+});
 function ethanChineseError(value) {
   const text = String(value || '操作未完成，请重试');
   if (/Only a single offscreen/i.test(text)) return '识别页面正在初始化，请稍后重试';
@@ -32,6 +37,22 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         'batch-collector/advanced_frame_v14.js','batch-collector/advanced_ui_v14.js']});
       return chrome.tabs.sendMessage(sender.tab.id,{type:'ETHAN_PRODUCT_MODE',product},{frameId:0});
     })().then(respond,error=>respond({error:ethanChineseError(error.message)}));
+    return true;
+  }
+  if (message.type === 'ETHAN_PAGE_QUICK_PACKAGE') {
+    const kind = message.kind;
+    if (!['main','detail','stitch','sku','all'].includes(kind)) { respond({ok:false,message:'无效的素材分类'}); return false; }
+    (async () => {
+      const product = await collectMaterialsFromTab(sender.tab);
+      if (!product?.ok) throw new Error('未找到商品图片，请等待页面加载完成后重试');
+      const downloadKinds = { main:kind==='main'||kind==='all', detail:kind==='detail'||kind==='all', sku:kind==='sku'||kind==='all', video:false, stitch:kind==='stitch' };
+      const categories = {main:'主图',detail:'描述图',stitch:'描述图',sku:'SKU图'};
+      if (!Object.entries(categories).some(([key,category]) => downloadKinds[key] && product.materials[category]?.length)) {
+        throw new Error('该商品未找到所选分类的图片');
+      }
+      await ensureOffscreenDocument();
+      return requestOffscreenPackage({ batchName:product.title, products:[product], downloadKinds, directFolderDownload:kind==='stitch', independentDownload:kind==='stitch', progressTabId:sender.tab.id, progressRequestId:message.requestId });
+    })().then(respond, error => respond({ok:false,message:ethanChineseError(error.message)}));
     return true;
   }
   if (message.type === 'ETHAN_PRODUCT_PACKAGE') {

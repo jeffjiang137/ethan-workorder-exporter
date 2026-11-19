@@ -322,6 +322,13 @@ function ethanChineseError(value) {
   }
 
   async function packageMaterials(message) {
+    const reportProgress = async payload => {
+      await sendProgress(payload);
+      if (message.progressTabId && message.progressRequestId) {
+        await chrome.runtime.sendMessage({type:'ETHAN_PAGE_PACKAGE_PROGRESS',tabId:message.progressTabId,requestId:message.progressRequestId,...payload}).catch(()=>{});
+      }
+    };
+
     const products = Array.isArray(message.products) ? message.products : [];
     if (!products.length) return { ok: false, message: '没有可打包的产品素材。' };
 
@@ -330,7 +337,7 @@ function ethanChineseError(value) {
     const failures = [];
     const pendingDownloads = new Set();
     async function saveOutput(path, bytes, type) {
-      if (message.directFolderDownload) {
+      if (message.directFolderDownload && !message.independentDownload) {
         const gate = await chrome.runtime.sendMessage({type:'ETHAN_LINK_QUEUE_GATE'});
         if (gate?.ok === false) throw new Error('任务已清除');
       }
@@ -407,7 +414,7 @@ function ethanChineseError(value) {
         for (let index = 0; index < Math.min(4, urls.length); index += 1) prefetch(index);
         for (let index = 0; index < urls.length; index += 1) {
           const url = urls[index];
-          await sendProgress({ stage: 'pack', current: productIndex + 1, total: products.length, title: product.title || product.offerId || folder, category, fileCount, skippedCount, failedCount, processedFiles, totalFiles });
+          await reportProgress({ stage: 'pack', current: productIndex + 1, total: products.length, title: product.title || product.offerId || folder, category, fileCount, skippedCount, failedCount, processedFiles, totalFiles });
           try {
             const fetched = prefetched.has(index) ? await prefetched.get(index) : null;
             prefetched.delete(index);
@@ -470,7 +477,7 @@ function ethanChineseError(value) {
       return {ok: failedCount === 0, productCount:products.length, fileCount, skippedCount, failedCount,
         message: failedCount ? '部分素材下载失败，已保留商品标签页' : ''};
     }
-    await sendProgress({ stage: 'zip', productCount: products.length, fileCount, skippedCount, failedCount });
+    await reportProgress({ stage: 'zip', productCount: products.length, fileCount, skippedCount, failedCount });
     const blob = zip.build();
     const fileName = `${sanitizeSegment(message.batchName || '1688批量素材', '1688批量素材', 120)}.zip`;
     const url = URL.createObjectURL(blob);
@@ -492,7 +499,7 @@ function ethanChineseError(value) {
     }
 
     const result = { ok: true, batchFolder: fileName, productCount: products.length, fileCount, skippedCount, failedCount, zipSize: blob.size };
-    await sendProgress({ stage: 'done', ...result });
+    await reportProgress({ stage: 'done', ...result });
     return result;
   }
 

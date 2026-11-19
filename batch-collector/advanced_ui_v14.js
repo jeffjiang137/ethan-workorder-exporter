@@ -1088,8 +1088,17 @@ function ethanChineseError(value) {
       }
       if(kinds.stitch && !kinds.detail) output.materials['描述图']=product.materials['描述图'];
       if(!zip && Object.values(kinds).filter(Boolean).length===1) {
-        if(kinds.stitch){state.items.forEach(item=>item.selected=item.category==='详情图');state.stitch=true;}
-        await importSelected();state.stitch=false;return;
+        const selection = new Map(state.items.map(item => [item, item.selected]));
+        const previousStitch = state.stitch;
+        try {
+          if(kinds.stitch){state.items.forEach(item=>item.selected=item.category==='详情图');state.stitch=true;}
+          await importSelected();
+        } finally {
+          state.items.forEach(item => { if(selection.has(item)) item.selected = selection.get(item); });
+          state.stitch = previousStitch;
+          applyFilters();
+        }
+        return;
       }
       setStatus('正在下载商品素材…');
       const result=await send({type:'ETHAN_PRODUCT_PACKAGE',product:output,downloadKinds:kinds,zip},1200000);

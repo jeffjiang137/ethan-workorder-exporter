@@ -1055,6 +1055,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ];
       if (singleQuery) {
         const { rows, total, words } = results[0];
+        const incompleteOrders = [];
         table.clearSelection?.();
         Object.assign(form, {
           searchType: '', sysMenuId: 0, page: 1, limit, total, orderBy: 'cust_service_list-plan_complete', order: 'asc',
@@ -1063,8 +1064,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         owner.dataList = rows;
         await owner.$nextTick();
+        if (todayOnly) {
+          const labels = ['操作状态', '处理结果', '资料验收', '计划完成', '完成时间', '工作积分'];
+          const columns = table.store?.states?.columns || table.columns || [];
+          const fields = labels.map(label => ({
+            label,
+            key: columns.find(column => String(column.label || '').trim() === label)?.property
+          }));
+          const missingByRow = new WeakMap();
+          for (const row of rows) {
+            const missing = fields.filter(({label, key}) => {
+              const value = key ? row[key] : undefined;
+              const text = String(value ?? '').trim();
+              return !text || text === '-' || text === '--' ||
+                (['资料验收', '计划完成', '完成时间'].includes(label) && /^1970(?:\D|$)/.test(text));
+            }).map(field => field.label);
+            if (missing.length) {
+              missingByRow.set(row, missing);
+              incompleteOrders.push({ id: String(row['cust_service_list-id'] ?? ''), missing });
+            }
+          }
+          if (!document.getElementById('ethan-incomplete-workorder-style')) {
+            const style = document.createElement('style');
+            style.id = 'ethan-incomplete-workorder-style';
+            style.textContent = '.el-table .ethan-incomplete-workorder>td{background:#ffe4e4!important;color:#c62828!important}.el-table .ethan-incomplete-workorder>td a{color:#c62828!important}';
+            document.head.appendChild(style);
+          }
+          // Keep the native row classes, and let Vue reapply the warning after rerenders.
+          const originalClass = table.__ethanOriginalRowClass ?? table.rowClassName;
+          if (!table.__ethanValidationInstalled) {
+            table.__ethanOriginalRowClass = originalClass;
+            table.__ethanValidationInstalled = true;
+          }
+          table.rowClassName = function (context) {
+            const existing = typeof originalClass === 'function' ? originalClass(context) : originalClass || '';
+            return existing + (missingByRow.has(context.row) ? ' ethan-incomplete-workorder' : '');
+          };
+          table.$forceUpdate();
+          await owner.$nextTick();
+        }
         table.doLayout?.();
-        return { ok: true, rowCount: rows.length };
+        return { ok: true, rowCount: rows.length, incompleteOrders };
       }
       const rows = results.flatMap((result) => result.rows);
       // Keep 1970 dates first in chronological order; empty/invalid dates stay last.
@@ -1185,4 +1225,15 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   }
   throw Error('抠抠图页面未就绪，请完成页面加载或登录后重试');
  })().then(reply,error=>reply({ok:false,message:ethanChineseError(error.message)}));return true;
+});
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'ETHAN_DIALOG_SNAPSHOT') return false;
+  if (!sender.tab?.id || !sender.url?.startsWith('https://ethan.hzzichi.com/')) return false;
+  (async () => {
+    const active = await chrome.tabs.query({active: true, windowId: sender.tab.windowId});
+    if (active[0]?.id !== sender.tab.id) throw new Error('请保持工单页面在前台');
+    const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, {format: 'png'});
+    sendResponse({ok: true, dataUrl});
+  })().catch(error => sendResponse({ok: false, message: error.message}));
+  return true;
 });
