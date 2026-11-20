@@ -1,4 +1,4 @@
-﻿param([string[]]$ExtensionId)
+param([string[]]$ExtensionId)
 $ErrorActionPreference = 'Stop'
 $projectDir = $PSScriptRoot
 if (!$ExtensionId) {

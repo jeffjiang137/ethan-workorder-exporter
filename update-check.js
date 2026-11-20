@@ -40,7 +40,7 @@ function ethanChineseError(value) {
       const asset = release.assets?.find(item => item.name === `ethan-workorder-exporter-v${version}.zip`);
       if (!asset || !asset.browser_download_url.startsWith(`https://github.com/${repo}/releases/download/`)) throw new Error('新版尚未提供有效的更新包');
       await chrome.downloads.download({url:asset.browser_download_url,filename:asset.name,saveAs:true});
-      status.textContent = `已开始下载 v${version}。下载完成后解压覆盖原插件目录，再在扩展管理页重新加载。`;
+      status.textContent = `已开始下载 v${version}。完整解压后双击 update-extension.cmd，更新并注册 Photoshop 组件，再重新加载扩展。`;
     } catch (error) {
       status.textContent = `更新检查未完成：${ethanChineseError(error.message) || '请检查网络后重试'}`;
     } finally { button.disabled = false; }

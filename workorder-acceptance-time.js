@@ -10,18 +10,28 @@
   toolbarStyle.textContent = `
     .ethan-edit-dialog>.el-dialog__header{box-sizing:border-box;min-height:52px!important;padding-top:16px!important;padding-bottom:10px!important}
     .ethan-edit-dialog>.el-dialog__body{padding-top:0!important}
+    .ethan-copy-company-row,.ethan-copy-company-row .el-form-item__label{cursor:pointer}
+    .ethan-copy-company-row input:disabled{pointer-events:none}
     .ethan-feedback-phrases{position:absolute;left:calc(100% + 6px);bottom:16px;z-index:2;box-sizing:border-box;width:164px;padding:10px;background:#fff;border:1px solid #dce5df;border-radius:6px;box-shadow:0 4px 16px #0002;color:#303133}
     .ethan-feedback-phrases[hidden],.ethan-edit-dialog:has([data-ethan-dialog-snapshot][aria-busy="true"]) .ethan-feedback-phrases{display:none}
-    .ethan-feedback-phrases strong{display:block;margin-bottom:6px;font-size:13px}
+    .ethan-feedback-phrases{width:184px;max-height:70vh;overflow:auto}
+    .ethan-phrase-header,.ethan-phrase-row{display:flex;align-items:center;gap:3px}
+    .ethan-phrase-header strong{flex:1;font-size:13px}
+    .ethan-phrase-row>button:first-child{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ethan-feedback-phrases .ethan-phrase-tool{width:auto;flex:none;padding:4px}
+    .ethan-phrase-edit{opacity:0}
+    .ethan-phrase-row:hover .ethan-phrase-edit,.ethan-phrase-row:focus-within .ethan-phrase-edit{opacity:1}
+    .ethan-feedback-phrases .ethan-phrase-delete{color:#c53030}
+    .ethan-phrase-editor{width:100%;box-sizing:border-box;margin:4px 0;padding:7px;border:1px solid #dce5df;border-radius:6px;background:#f5faf7}
+    .ethan-phrase-editor input{width:100%;box-sizing:border-box;padding:5px 6px;border:1px solid #cadbd1;border-radius:4px;background:#fff;color:#303133;font-family:inherit;font-size:12px;line-height:1.5}
+    .ethan-phrase-editor input:focus{outline:1px solid #13a66a;border-color:#13a66a}
+    .ethan-phrase-editor-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:5px}
+    .ethan-phrase-editor-actions .ethan-phrase-tool{padding:4px 8px}
+    .ethan-phrase-editor-actions .ethan-phrase-confirm{background:#e0f3e9}
     .ethan-feedback-phrases button{display:block;width:100%;padding:5px 7px;border:0;border-radius:4px;background:transparent;text-align:left;color:#08794e;cursor:pointer;font-size:12px}
     .ethan-feedback-phrases button:is(:hover,:focus-visible){background:#e4f3eb}
     @media(max-width:960px){.ethan-feedback-phrases{position:static;width:auto;margin:0 12px 12px}.ethan-feedback-phrases button{display:inline-block;width:auto}}
     .ethan-edit-dialog.is-fullscreen .ethan-feedback-phrases{position:static;width:auto;margin:0 12px 12px}
-    .ethan-copy-field{position:relative}
-    .ethan-copy-field>.el-input__inner{padding-right:52px}
-    .ethan-copy-field>button[data-ethan-field-copy]{position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:2px 6px;border:0;border-radius:4px;background:transparent;color:#08794e;cursor:pointer;font-size:12px}
-    .ethan-copy-field>button[data-ethan-field-copy]:hover{background:#e4f3eb}
-    .ethan-copy-field>button[data-ethan-field-copy]:focus-visible{outline:2px solid #08794e}
     .ethan-dialog-tool{top:6px!important;width:40px!important;height:40px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#78838f!important;cursor:pointer!important;box-shadow:none!important;transition:background .15s,color .15s,box-shadow .15s!important}
     .ethan-dialog-tool:hover{background:#edf7f2!important;color:#0b995f!important}
     .ethan-dialog-tool:active{background:#dcefe5!important;box-shadow:inset 0 1px 3px #163b2420!important}
@@ -36,7 +46,9 @@
     .ethan-ai-select{display:none!important}
     .ethan-ai-toggle.el-input__inner{display:block;width:100%;height:28px;line-height:26px;font-size:12px;text-align:left;cursor:pointer}
     .ethan-status-host{position:relative}
-    .ethan-status-host .el-input__inner{padding-right:101px}
+    .ethan-status-host .el-input__inner{padding-right:145px;text-overflow:ellipsis}
+    .el-row:has(>.el-col .ethan-status-host):has(>.el-col .ethan-result-field)>.el-col:has(.ethan-status-host){width:59%}
+    .el-row:has(>.el-col .ethan-status-host):has(>.el-col .ethan-result-field)>.el-col:has(.ethan-result-field){width:41%}
     .ethan-status-actions{position:absolute;right:26px;top:50%;transform:translateY(-50%);display:flex;gap:6px;z-index:1}
     .ethan-status-actions button{border:0;background:transparent;color:#13a66a;font:inherit;font-size:12px;line-height:20px;padding:0 2px;cursor:pointer;white-space:nowrap}
     .ethan-status-actions button:hover{color:#087e4e;text-decoration:underline}
@@ -114,24 +126,6 @@
     }
   }
 
-  function installFieldCopy(dialog) {
-    if (!field(dialog, '服务描述')) return;
-    for (const label of ['公司名称', '商家账号', '商家密码']) {
-      const item = field(dialog, label);
-      const input = item?.querySelector('input.el-input__inner, input:not([type="hidden"]), .el-input__inner');
-      if (!input || item.querySelector('[data-ethan-field-copy]')) continue;
-      const wrapper = input.parentElement;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.ethanFieldCopy = label;
-      button.setAttribute('aria-label', '复制' + label);
-      button.title = '复制' + label;
-      button.textContent = '复制';
-      wrapper.classList.add('ethan-copy-field');
-      wrapper.appendChild(button);
-    }
-  }
-
   function installFeedbackPhrases(dialog) {
     const input = field(dialog, '情况反馈')?.querySelector('textarea');
     const existing = dialog.querySelector('.ethan-feedback-phrases');
@@ -145,38 +139,177 @@
     card.hidden = document.activeElement !== input;
     const title = document.createElement('strong');
     title.textContent = '快捷填入';
-    card.append(title);
+    const header = document.createElement('div');
+    header.className = 'ethan-phrase-header';
+    const list = document.createElement('div');
+    header.append(title);
+    card.append(header, list);
 
-    const phrases = [
+    const mobileSyncPhrase = '手机端同步加积分0.2';
+    const defaultPhrases = [
       '发给店长', '扣首页', '海报', '扣模板', '扣主图', '扣信息', '扣图片', '数量不够已反馈',
-      '不用上传', '店长上传', '高版本', '手机端同步加积分0.2', '抠图', '不抠图'
-    ];
+      '不用上传', '店长上传', '高版本', mobileSyncPhrase, '抠图', '不抠图'
+    ].map(text => ({ text, mobileSync: text === mobileSyncPhrase }));
+    const storageKey = 'ethan.feedbackPhrases.v1';
+    let phrases = defaultPhrases;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (Array.isArray(saved) && saved.every(item => typeof item?.text === 'string')) phrases = saved;
+    } catch {}
+    let deleting = false;
+    let draft;
+    function savePhrases(next) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        phrases = next;
+        return true;
+      } catch {
+        window.alert('快捷短语保存失败，请重试。');
+        return false;
+      }
+    }
     const currentMonthDay = () => {
       const today = new Date();
       return (today.getMonth() + 1) + '.' + today.getDate();
     };
     const dateButton = document.createElement('button');
     dateButton.textContent = currentMonthDay();
-    const phraseButtons = phrases.map(phrase => {
-      const button = document.createElement('button');
-      button.textContent = phrase;
-      return button;
-    });
-    for (const button of [...phraseButtons, dateButton]) {
+    function bindInsert(button, phrase) {
       button.type = 'button';
+      button.addEventListener('mousedown', event => event.preventDefault());
       button.addEventListener('click', () => {
         if (input.disabled || input.readOnly) return;
         if (button === dateButton) dateButton.textContent = currentMonthDay();
         const value = input.value;
-        const separator = value && !/[\s，。；、,.!?！？;]$/.test(value) ? '，' : '';
-        const addition = separator + button.textContent;
+        const isMobileSync = phrase?.mobileSync;
+        const session = editorSessions.get(dialog);
+        let points;
+        let nextPoints;
+        let completeButton;
+        if (isMobileSync) {
+          if (!session || session.mobileSyncApplied || value.includes(mobileSyncPhrase) || value.includes(phrase.text)) return;
+          completeButton = field(dialog, '操作状态')?.querySelector('.ethan-status-complete');
+          if (!completeButton) return;
+          points = component(field(dialog, '工作积分'), 'ElInputNumber');
+          if (!points || points.disabled || points.inputNumberDisabled ||
+              typeof points.setCurrentValue !== 'function' || !Number.isFinite(points.currentValue)) return;
+          nextPoints = Number((points.currentValue + 0.2).toPrecision(15));
+          if (nextPoints > points.max || nextPoints < points.min ||
+              (typeof points.precision === 'number' && Number(nextPoints.toFixed(points.precision)) !== nextPoints)) return;
+        }
+        const caret = input.selectionStart;
+        const before = value.slice(0, caret);
+        const after = value.slice(caret);
+        const prefix = before && !/[\s，。；、,.!?！？;]$/.test(before) ? ' ' : '';
+        const suffix = after && !/^[\s，。；、,.!?！？;]/.test(after) ? '，' : '';
+        const addition = prefix + button.textContent + suffix;
         if (input.maxLength >= 0 && value.length + addition.length > input.maxLength) return;
         input.focus({ preventScroll: true });
-        input.setSelectionRange(value.length, value.length);
+        input.setSelectionRange(caret, caret);
         // Use the browser's editing command so Ctrl+Z can undo the insertion.
-        document.execCommand('insertText', false, addition);
+        if (!document.execCommand('insertText', false, addition)) return;
+        if (isMobileSync) {
+          points.setCurrentValue(nextPoints);
+          session.mobileSyncApplied = true;
+          completeButton.click();
+        }
+        if (suffix) {
+          const end = caret + addition.length - suffix.length;
+          input.setSelectionRange(end, end);
+        }
       });
-      card.append(button);
+    }
+    bindInsert(dateButton);
+    function tool(symbol, label, action, className = '') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ethan-phrase-tool ' + className;
+      button.textContent = symbol;
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.addEventListener('click', action);
+      return button;
+    }
+    function editPhrase(index, row) {
+      const box = document.createElement('div');
+      box.className = 'ethan-phrase-editor';
+      const editor = document.createElement('input');
+      editor.type = 'text';
+      editor.value = phrases[index]?.text ?? '';
+      editor.placeholder = '输入短语';
+      editor.setAttribute('aria-label', editor.placeholder);
+      const actions = document.createElement('div');
+      actions.className = 'ethan-phrase-editor-actions';
+      const closeEditor = () => {
+        input.focus({ preventScroll: true });
+        render();
+      };
+      const confirmEdit = () => {
+        const text = editor.value.trim();
+        if (!text) {
+          editor.focus();
+          return;
+        }
+        const next = [...phrases];
+        next[index] = { ...next[index], text };
+        if (savePhrases(next)) closeEditor();
+      };
+      actions.append(tool('取消', '取消编辑短语', closeEditor),
+        tool('确认', '保存短语', confirmEdit, 'ethan-phrase-confirm'));
+      box.append(editor, actions);
+      row.append(box);
+      editor.focus();
+      editor.select();
+      editor.addEventListener('keydown', event => {
+        if (event.isComposing || !['Enter', 'Escape'].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === 'Enter') confirmEdit();
+        else closeEditor();
+      });
+    }
+    const add = tool('+', '新增短语', () => {
+      render(card.querySelector('.ethan-phrase-editor') ? -1 : phrases.length);
+    });
+    const remove = tool('−', '管理删除', () => {
+      if (deleting && !savePhrases(draft)) return;
+      deleting = !deleting;
+      draft = deleting ? [...phrases] : null;
+      render();
+    });
+    header.append(add, remove);
+    function render(editIndex = -1) {
+      if (list.contains(document.activeElement)) input.focus({ preventScroll: true });
+      add.disabled = deleting;
+      remove.textContent = deleting ? '保存' : '−';
+      remove.title = deleting ? '保存短语列表' : '管理删除';
+      remove.setAttribute('aria-label', remove.title);
+      list.replaceChildren();
+      const entries = deleting ? draft : phrases;
+      entries.forEach((phrase, index) => {
+        const row = document.createElement('div');
+        row.className = 'ethan-phrase-row';
+        list.append(row);
+        if (index === editIndex) {
+          editPhrase(index, row);
+          return;
+        }
+        const button = document.createElement('button');
+        button.textContent = phrase.text;
+        button.title = phrase.text;
+        bindInsert(button, phrase);
+        button.disabled = deleting;
+        row.append(button, deleting
+          ? tool('×', '删除 ' + phrase.text, () => {
+            draft.splice(index, 1);
+            remove.focus();
+            render();
+          }, 'ethan-phrase-delete')
+          : tool('✎', '编辑 ' + phrase.text, () => render(index), 'ethan-phrase-edit'));
+      });
+      list.append(dateButton);
+      dateButton.disabled = deleting;
+      if (editIndex === phrases.length) editPhrase(editIndex, list);
     }
     const hideAfterFocusLeaves = event => {
       if (event.relatedTarget !== input && !card.contains(event.relatedTarget)) card.hidden = true;
@@ -188,6 +321,7 @@
     input.addEventListener('focusout', hideAfterFocusLeaves);
     card.addEventListener('focusout', hideAfterFocusLeaves);
     dialog.append(card);
+    render();
   }
 
   function installAiProjectToggle(dialog) {
@@ -235,11 +369,14 @@
     actions.className = 'ethan-status-actions';
     const confirm = document.createElement('button');
     const complete = document.createElement('button');
-    confirm.type = complete.type = 'button';
+    const publish = document.createElement('button');
+    complete.className = 'ethan-status-complete';
+    confirm.type = complete.type = publish.type = 'button';
     const optionFor = (...labels) => status.options.find(option =>
       labels.includes(String(option.currentLabel).trim()));
     const confirmOption = () => optionFor('等待客户确认', '待客户确认', '待确认');
     const completeOption = () => optionFor('处理完成') || optionFor('已完成');
+    const publishOption = () => optionFor('等待助理发布', '待助理发布');
     const isConfirm = () => confirmOption() && status.value === confirmOption().value;
     const target = () => isConfirm() ? optionFor('等待处理') : confirmOption();
     const disabled = option => status.disabled || status.selectDisabled || !option
@@ -255,14 +392,17 @@
 
     confirm.addEventListener('click', event => choose(event, target(), Boolean(isConfirm())));
     complete.addEventListener('click', event => choose(event, completeOption()));
+    publish.addEventListener('click', event => choose(event, publishOption()));
     complete.textContent = '完成';
+    publish.textContent = '待发布';
     const sync = () => {
       const label = isConfirm() ? '待处理' : '待确认';
       if (confirm.textContent !== label) confirm.textContent = label;
       confirm.disabled = Boolean(disabled(target()));
       complete.disabled = Boolean(disabled(completeOption()));
+      publish.disabled = Boolean(disabled(publishOption()));
     };
-    actions.append(confirm, complete);
+    actions.append(publish, confirm, complete);
     host.classList.add('ethan-status-host');
     host.append(actions);
     sync();
@@ -356,7 +496,8 @@
       }
       if (dialog.querySelector('.el-dialog__title')?.textContent.trim() !== '编辑') return;
       dialog.classList.add('ethan-edit-dialog');
-      installFieldCopy(dialog);
+      field(dialog, '处理结果')?.classList.add('ethan-result-field');
+      if (field(dialog, '服务描述')) field(dialog, '公司名称')?.classList.add('ethan-copy-company-row');
       installFeedbackPhrases(dialog);
       installTimeConfirmation(dialog);
       installAiProjectToggle(dialog);
@@ -465,9 +606,10 @@
         if (!dialog.getClientRects().length) return;
         const label = String(status.options.find(option => option.value === value)?.currentLabel ?? value).trim();
         const acceptance = previous === '等待处理' && value === '处理中';
-        // General status changes can also fire while the editor loads a record.
+        // Loading a record updates the value watcher; only a change event can stamp a time.
         const fromShortcut = shortcut !== null && shortcut.value === value;
-        const completion = fromShortcut && !shortcut.clear;
+        const completion = (previous !== value && label === '等待助理发布')
+          || (fromShortcut && !shortcut.clear);
         const clear = fromShortcut && shortcut.clear && label === '等待处理';
         if (!acceptance && !completion && !clear) return;
         const now = new Date();

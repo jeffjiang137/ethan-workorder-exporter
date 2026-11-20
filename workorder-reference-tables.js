@@ -3,7 +3,7 @@
   window.__ethanReferenceTables = true;
   const timing = [
     ['诚信通首页装修','5个工作日（下单当天算时间）'],
-    ['二级页面、模板设计','3个工作日（其他下单当天不算时间）'],
+    ['二级页面、模板设计','3个工作日（下单当天不算时间）'],
     ['海报','≤4张：3个工作日；≥5张：5个工作日'],
     ['主图设计','1–3张：1个工作日；+4=7张：2个；8张以上：3个'],
     ['信息新增、信息替换、极限词、方正字体修改等','1–3条：1个工作日；+7=10条：2个；+10=20条：3个；+20=40条：4个；+20=60条：5个'],
@@ -22,10 +22,10 @@
     ['5∶1扣信息','极限词修改-信息'],['特殊情况询问主管','没有在规定时间内完成任务'],['1∶5扣图片','简易主图'],['1∶20扣图片','主图']
   ];
   const style = document.createElement('style');
-  style.textContent = `.ethan-reference{position:fixed;box-sizing:border-box;padding:10px;border:1px solid #dbe9e52e;border-radius:9px;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);color:#edf3f4;box-shadow:0 8px 28px #0002;overflow:hidden;font:12px/1.4 Arial,sans-serif;pointer-events:auto}.ethan-reference h3{margin:0 0 7px;font-size:14px;color:#bde8d7}.ethan-reference table{width:100%;border-collapse:collapse;table-layout:fixed}.ethan-reference td,.ethan-reference th{padding:4px 6px;border:1px solid #d6e6e526;text-align:left;vertical-align:top;overflow-wrap:anywhere}.ethan-reference th{background:transparent;color:#c9e7dd}.ethan-reference tbody tr:nth-child(even){background:rgba(255,255,255,.05)}.ethan-reference th:first-child{width:32%}`;
+  style.textContent = `.ethan-reference{position:fixed;box-sizing:border-box;padding:10px;border:1px solid #dbe9e52e;border-radius:9px;background:rgba(0,0,0,.08);backdrop-filter:blur(10px);color:rgba(255,255,255,.56);box-shadow:none;overflow:hidden;font:12px/1.4 Arial,sans-serif;pointer-events:auto}.ethan-reference h3{margin:0 0 7px;font-size:14px;color:rgba(255,255,255,.64)}.ethan-reference table{width:100%;border-collapse:collapse;table-layout:fixed}.ethan-reference td,.ethan-reference th{padding:4px 6px;border:1px solid #d6e6e526;text-align:left;vertical-align:top;overflow-wrap:anywhere}.ethan-reference th{background:transparent;color:rgba(255,255,255,.60)}.ethan-reference tbody tr:nth-child(even){background:rgba(255,255,255,.05)}.ethan-reference th:first-child{width:32%}`;
   document.head.append(style);
   const timingStyle = document.createElement('style');
-  timingStyle.textContent = `.ethan-timing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.ethan-timing-item{min-width:0;padding:7px 9px;border:1px solid #ffffff20;border-radius:5px;background:#ffffff0b}.ethan-timing-item h4{margin:0 0 6px;color:#edf3f4;font-size:1em;line-height:1.5}.ethan-timing-item p{margin:3px 0;color:#edf3f4;line-height:1.55;overflow-wrap:anywhere}.ethan-timing-item-wide{grid-column:1/-1}.ethan-reference.ethan-timing h3{margin-bottom:10px}`;
+  timingStyle.textContent = `.ethan-timing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.ethan-timing-item{min-width:0;padding:7px 9px;border:1px solid #ffffff20;border-radius:5px;background:transparent}.ethan-timing-item h4{margin:0 0 6px;color:rgba(255,255,255,.56);font-size:1em;line-height:1.5}.ethan-timing-item p{margin:3px 0;color:rgba(255,255,255,.56);line-height:1.55;overflow-wrap:anywhere}.ethan-timing-item-wide{grid-column:1/-1}.ethan-reference.ethan-timing h3{margin-bottom:10px}`;
   document.head.append(timingStyle);
   function timingPanel() {
     const box = document.createElement('aside');
@@ -65,7 +65,7 @@
     if(!dialog){left?.remove();right?.remove();active=left=right=null;return;}
     if(active!==dialog){left?.remove();right?.remove();active=dialog;left=panel('扣除数量比例',['比例','项目'],ratios);right=timingPanel();dialog.parentElement.append(left,right);}
     const rect=dialog.getBoundingClientRect(),gap=48,edge=16;
-    const widths=[Math.min(510,rect.left-gap-edge),Math.min(470,innerWidth-rect.right-gap-edge)];
+    const widths=[Math.min(510,rect.left-gap-edge),Math.min(430,innerWidth-rect.right-200-edge)];
     for(const [index,box] of [left,right].entries()){
       const width=widths[index];box.hidden=width<180;
       if(!box.hidden){

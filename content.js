@@ -3056,23 +3056,23 @@ function ethanChineseError(value) {
       button.title = '快照并复制弹窗';
     }
   });
-  document.addEventListener('click', async event => {
-    const button = event.target.closest?.('.ethan-edit-dialog button[data-ethan-field-copy]');
-    if (!button) return;
-    const label = button.dataset.ethanFieldCopy;
-    const input = button.parentElement.querySelector(':scope > input:not([type="hidden"]), :scope > .el-input__inner');
-    const value = input?.value ?? input?.textContent;
-    if (!value) {
-      showSnapshotToast(label + '为空');
+  document.addEventListener('click', async (event) => {
+    const row = event.target.closest?.('.ethan-edit-dialog .ethan-copy-company-row');
+    if (!row) return;
+
+    const name = row.querySelector('input.el-input__inner')?.value.trim();
+    if (!name) {
+      showSnapshotToast('公司名称为空');
       return;
     }
     try {
-      await copyPlainText(value);
-      showSnapshotToast(label + '已复制');
+      await copyPlainText(name);
+      showSnapshotToast('公司名称已复制');
     } catch {
-      showSnapshotToast(label + '复制失败，请重试');
+      showSnapshotToast('复制失败，请重试');
     }
   });
+
   startWorkOrderColumnLayout();
   startAutoOpenWorkOrderPage();
   startAutoApplyDefaultFilters();

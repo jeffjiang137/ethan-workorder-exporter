@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ethan 工单助手",
-  "version": "1.0.54",
+  "version": "1.0.57",
   "description": "Ethan 工单管理与素材助手：提示词模板管理、图片工具及工单统计。",
   "permissions": [
     "clipboardWrite",
@@ -43,6 +43,12 @@
   },
   "content_scripts": [
     {
+      "matches": ["https://picman.1688.com/album/picman/picker.htm*"],
+      "js": ["decoration-image-picker.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["https://*.doubao.com/*"],
       "js": ["doubao-original.js"],
       "run_at": "document_start",
@@ -61,6 +67,7 @@
       ],
       "js": [
         "workorder-acceptance-time.js",
+        "workorder-operator-edit.js",
         "service-quantity-arithmetic.js",
         "daily-planned-points.js",
         "customer-template-filter.js",
@@ -216,3 +223,4 @@
     }
   ]
 }
+
